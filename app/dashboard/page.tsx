@@ -15,8 +15,8 @@ import {
   YAxis,
 } from "recharts";
 import Link from "next/link";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LogoutButton } from "@/components/ui/logout-button";
+import { Dot } from "lucide-react";
+import { AppShell } from "@/components/layout/app-shell";
 
 type Range = "daily" | "weekly" | "monthly" | "yearly" | "custom";
 
@@ -58,6 +58,17 @@ export default function DashboardPage() {
     },
   );
 
+  const alerts =
+    (data?.alerts as
+      | Array<{
+          product_id: string;
+          godown_id: string;
+          name: string;
+          current_stock: number;
+          alert_type: "EMPTY" | "LOW" | "OK";
+        }>
+      | undefined) ?? [];
+
   useEffect(() => {
     if (error) {
       console.error("Dashboard load error", error);
@@ -74,49 +85,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="app-shell flex">
-      {/* Sidebar */}
-      <aside className="hidden md:flex md:w-60 flex-col border-r sidebar px-5 py-6">
-        <div className="mb-8">
-          <div className="text-xs font-semibold tracking-widest text-indigo-400 uppercase">
-            DeepStaq
-          </div>
-          <div className="mt-1 text-[11px] text-slate-500">
-            Inventory & Godown Suite
-          </div>
-        </div>
-        <nav className="space-y-1 text-sm">
-          <Link
-            href="/dashboard"
-            className="sidebar-link-active flex items-center justify-between rounded-lg px-3 py-2"
-          >
-            <span>Dashboard</span>
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          </Link>
-          <Link
-            href="/godowns"
-            className="sidebar-link block rounded-lg px-3 py-2"
-          >
-            Godowns & Products
-          </Link>
-          <Link
-            href="/reports"
-            className="sidebar-link block rounded-lg px-3 py-2"
-          >
-            Reports & Exports
-          </Link>
-        </nav>
-        <div className="mt-auto pt-4 border-t app-border">
-          <div className="pb-2">
-            <LogoutButton />
-          </div>
-          <div className="pt-3 text-[11px] text-subtle">
-            Audit-safe stock, multi-godown ready.
-          </div>
-        </div>
-      </aside>
-
-      <main className="flex-1 px-4 md:px-8 py-6 space-y-6">
+    <AppShell
+      title="Overview"
+      subtitle="KPIs, stock trends and risk alerts"
+    >
+      <div className="space-y-6">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
@@ -125,12 +98,6 @@ export default function DashboardPage() {
             <p className="text-xs text-subtle">
               High-level KPIs, stock trends and risk alerts across all godowns.
             </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-subtle hidden sm:inline">
-              Theme
-            </span>
-            <ThemeToggle />
           </div>
         </header>
 
@@ -180,23 +147,27 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[
             {
               label: "Total Godowns",
               value: data?.kpis?.godowns ?? 0,
+              accent: "from-indigo-500/20 via-indigo-500/0 to-transparent",
             },
             {
               label: "Total Products",
               value: data?.kpis?.products ?? 0,
+              accent: "from-sky-500/20 via-sky-500/0 to-transparent",
             },
             {
               label: "Stock IN (units)",
               value: data?.kpis?.stockIn ?? 0,
+              accent: "from-emerald-500/20 via-emerald-500/0 to-transparent",
             },
             {
               label: "Stock OUT (units)",
               value: data?.kpis?.stockOut ?? 0,
+              accent: "from-rose-500/20 via-rose-500/0 to-transparent",
             },
             {
               label: "Stock Value",
@@ -204,20 +175,30 @@ export default function DashboardPage() {
                 data?.kpis?.stockValue != null
                   ? `₹${Number(data.kpis.stockValue).toFixed(2)}`
                   : "₹0.00",
+              accent: "from-amber-500/20 via-amber-500/0 to-transparent",
             },
             {
               label: "Alerts",
               value: data?.kpis?.alerts ?? 0,
+              accent: "from-violet-500/20 via-violet-500/0 to-transparent",
             },
           ].map((kpi) => (
             <div
               key={kpi.label}
-              className="rounded-2xl border app-border app-surface px-4 py-3"
+              className="group relative overflow-hidden rounded-2xl border app-border app-surface p-5 transition will-change-transform hover:-translate-y-0.5 hover:shadow-xl"
             >
-              <p className="text-[11px] uppercase tracking-wide text-slate-400">
+              <div className="pointer-events-none absolute inset-0">
+                <div className={`absolute -top-24 -right-24 h-56 w-56 rounded-full bg-gradient-to-br ${kpi.accent} blur-2xl`} />
+                <div className="absolute inset-0 opacity-0 transition duration-200 group-hover:opacity-100">
+                  <div className="absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-indigo-500/10 blur-2xl" />
+                </div>
+              </div>
+              <p className="relative text-[11px] uppercase tracking-wide text-subtle">
                 {kpi.label}
               </p>
-              <p className="mt-1 text-lg font-semibold">{kpi.value}</p>
+              <p className="relative mt-2 text-3xl font-semibold tracking-tight">
+                {kpi.value}
+              </p>
             </div>
           ))}
         </section>
@@ -266,23 +247,60 @@ export default function DashboardPage() {
               Alerts
             </h2>
             <p className="text-xs text-subtle mb-2">
-              Detailed per-product alerts appear in the godown views.
+              Red = empty stock. Orange = low stock (&lt; 3). Green = OK.
             </p>
             <div className="space-y-2 text-xs">
-              <div className="alert-critical-tile flex items-center justify-between rounded-lg px-3 py-2 border">
-                <span className="font-medium">Critical / Empty</span>
-                <span>
-                  {data?.kpis?.alerts ?? 0}
-                </span>
-              </div>
-              <p className="text-[11px] text-subtle">
-                Configure thresholds per product in godown &gt; products.
-              </p>
+              {alerts.length === 0 ? (
+                <div className="rounded-lg border app-border app-surface px-3 py-2 text-subtle">
+                  No products yet.
+                </div>
+              ) : (
+                alerts.slice(0, 10).map((a) => {
+                  const isEmpty = a.alert_type === "EMPTY";
+                  const isLow = a.alert_type === "LOW";
+                  const dotClass = isEmpty
+                    ? "text-red-500"
+                    : isLow
+                      ? "text-orange-500"
+                      : "text-emerald-500";
+                  const badgeClass = isEmpty
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : isLow
+                      ? "border-orange-200 bg-orange-50 text-orange-800"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-800";
+                  const tileClass = isEmpty
+                    ? "border-red-200 bg-red-50"
+                    : "app-border app-surface";
+
+                  return (
+                    <Link
+                      key={a.product_id}
+                      href={`/godowns/${a.godown_id}`}
+                      className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 border transition hover:bg-slate-200/40 ${tileClass}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Dot className={`h-7 w-7 -ml-2 ${dotClass}`} />
+                          <span className="font-medium truncate">{a.name}</span>
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-subtle">
+                          Stock: {Number(a.current_stock).toString()}
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-medium ${badgeClass}`}
+                      >
+                        {a.alert_type}
+                      </span>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
         </section>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

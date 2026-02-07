@@ -36,7 +36,6 @@ export async function POST(req: NextRequest) {
     sku,
     unit_type_id,
     opening_stock,
-    min_stock_threshold,
     cost_price,
     selling_price,
   } = body as {
@@ -46,7 +45,6 @@ export async function POST(req: NextRequest) {
     sku?: string | null;
     unit_type_id?: string;
     opening_stock?: number;
-    min_stock_threshold?: number;
     cost_price?: number | null;
     selling_price?: number | null;
   };
@@ -65,7 +63,7 @@ export async function POST(req: NextRequest) {
       sku: sku ?? null,
       unit_type_id,
       opening_stock: opening_stock ?? 0,
-      min_stock_threshold: min_stock_threshold ?? 0,
+      min_stock_threshold: 0,
       cost_price: cost_price ?? null,
       selling_price: selling_price ?? null,
     })

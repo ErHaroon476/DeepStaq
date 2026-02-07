@@ -20,7 +20,13 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-const publicRoutes = ["/login", "/register", "/verify-email", "/reset-password"];
+const publicRoutes = [
+  "/login",
+  "/register",
+  "/verify-email",
+  "/reset-password",
+  "/get-started",
+];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -36,7 +42,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!firebaseUser && !publicRoutes.includes(pathname)) {
         router.replace("/login");
       }
-      if (firebaseUser && publicRoutes.includes(pathname)) {
+
+      if (
+        firebaseUser &&
+        !firebaseUser.emailVerified &&
+        !publicRoutes.includes(pathname) &&
+        pathname !== "/verify-email"
+      ) {
+        router.replace("/verify-email");
+      }
+
+      if (firebaseUser && publicRoutes.includes(pathname) && pathname !== "/get-started") {
         router.replace("/dashboard");
       }
     });

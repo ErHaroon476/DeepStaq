@@ -8,12 +8,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const type =
     (searchParams.get("type") as
-      | "daily"
-      | "weekly"
       | "monthly"
-      | "yearly") ?? "daily";
+      | "yearly") ?? "monthly";
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const godownId = searchParams.get("godownId");
 
   if (!from || !to) {
     return new Response("from/to required", { status: 400 });
@@ -22,12 +21,18 @@ export async function GET(req: NextRequest) {
   const start = dayjs(from).startOf("day");
   const end = dayjs(to).endOf("day");
 
-  const { data: movements, error } = await supabaseServer
+  let query = supabaseServer
     .from("stock_movements")
-    .select("movement_date, type, quantity, user_id")
+    .select("movement_date, type, quantity, products!inner(godown_id)")
     .eq("user_id", user.uid)
     .gte("movement_date", start.toISOString())
     .lte("movement_date", end.toISOString());
+
+  if (godownId) {
+    query = query.eq("products.godown_id", godownId);
+  }
+
+  const { data: movements, error } = await query;
 
   if (error) {
     return new Response(error.message, { status: 500 });
@@ -38,14 +43,10 @@ export async function GET(req: NextRequest) {
 
   const bucketFn = (d: dayjs.Dayjs): BucketKey => {
     switch (type) {
-      case "weekly":
-        // Use week start date as the bucket key to avoid needing the week plugin.
-        return d.startOf("week").format("YYYY-MM-DD");
       case "monthly":
         return d.format("YYYY-MM");
       case "yearly":
         return `${d.year()}`;
-      case "daily":
       default:
         return d.format("YYYY-MM-DD");
     }

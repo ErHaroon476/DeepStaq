@@ -10,35 +10,29 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const { name, description } = body as {
-    name?: string;
-    description?: string | null;
-  };
+  const { name } = body as { name?: string };
 
   if (!name || !name.trim()) {
     return new Response("Name is required", { status: 400 });
   }
 
   const { data, error } = await supabaseServer
-    .from("godowns")
-    .update({
-      name: name.trim(),
-      description: description ?? null,
-    })
+    .from("companies")
+    .update({ name: name.trim() })
     .eq("id", id)
     .eq("user_id", user.uid)
     .select("*")
     .single();
 
   if (error) {
-    console.error("[DeepStaq] Failed to update godown", error);
-    return new Response((error as any)?.message || "Unable to update godown.", {
+    console.error("[DeepStaq] Failed to update company", error);
+    return new Response((error as any)?.message || "Unable to update company.", {
       status: 500,
     });
   }
 
   if (!data) {
-    return new Response("Godown not found", { status: 404 });
+    return new Response("Company not found", { status: 404 });
   }
 
   return Response.json(data);
@@ -52,22 +46,21 @@ export async function DELETE(
   const { id } = await params;
 
   const { error, count } = await supabaseServer
-    .from("godowns")
+    .from("companies")
     .delete({ count: "exact" })
     .eq("id", id)
     .eq("user_id", user.uid);
 
   if (error) {
-    console.error("[DeepStaq] Failed to delete godown", error);
-    return new Response((error as any)?.message || "Unable to delete godown.", {
+    console.error("[DeepStaq] Failed to delete company", error);
+    return new Response((error as any)?.message || "Unable to delete company.", {
       status: 500,
     });
   }
 
   if (!count) {
-    return new Response("Godown not found", { status: 404 });
+    return new Response("Company not found", { status: 404 });
   }
 
   return new Response(null, { status: 204 });
 }
-

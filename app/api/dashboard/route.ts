@@ -117,18 +117,44 @@ export async function GET(req: NextRequest) {
   });
 
   let alertsCount = 0;
-  try {
-    const { data: alerts, error: alertsError } = await supabaseServer
-      .rpc("current_stock_alerts", { p_user_id: user.uid })
-      .select();
+  let alerts: Array<{
+    product_id: string;
+    godown_id: string;
+    name: string;
+    current_stock: number;
+    alert_type: "EMPTY" | "LOW" | "OK";
+  }> = [];
 
-    if (alertsError) {
-      console.error("[DeepStaq] Failed to load stock alerts", alertsError);
+  try {
+    const { data: stockRows, error: stockError } = await supabaseServer
+      .from("product_current_stock")
+      .select("product_id, godown_id, name, current_stock")
+      .eq("user_id", user.uid);
+
+    if (stockError) {
+      console.error("[DeepStaq] Failed to load product current stock", stockError);
     } else {
-      alertsCount = alerts?.length ?? 0;
+      alerts =
+        stockRows?.map((r: any) => {
+          const current = Number(r.current_stock ?? 0);
+          const alert_type = current <= 0 ? "EMPTY" : current < 3 ? "LOW" : "OK";
+          return {
+            product_id: r.product_id,
+            godown_id: r.godown_id,
+            name: r.name,
+            current_stock: current,
+            alert_type,
+          };
+        }) ?? [];
+
+      alertsCount = alerts.filter((a) => a.alert_type !== "OK").length;
+      alerts.sort((a, b) => {
+        const rank = (t: string) => (t === "EMPTY" ? 0 : t === "LOW" ? 1 : 2);
+        return rank(a.alert_type) - rank(b.alert_type);
+      });
     }
   } catch (err) {
-    console.error("[DeepStaq] current_stock_alerts RPC missing or failed", err);
+    console.error("[DeepStaq] Error while loading dashboard product stock", err);
   }
 
   return Response.json({
@@ -140,6 +166,7 @@ export async function GET(req: NextRequest) {
       stockValue: totalStockValue,
       alerts: alertsCount,
     },
+    alerts,
     series: Object.values(seriesMap).sort((a, b) =>
       a.date.localeCompare(b.date),
     ),

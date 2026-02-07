@@ -1,9 +1,10 @@
 "use client";
 
 import { useAuth } from "@/components/providers/auth-provider";
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { AppShell } from "@/components/layout/app-shell";
 
 type Movement = {
   id: string;
@@ -17,11 +18,10 @@ type Movement = {
 export default function ProductDetailPage({
   params,
 }: {
-  params: { godownId: string; productId: string };
+  params: Promise<{ godownId: string; productId: string }>;
 }) {
   const { user } = useAuth();
-  const godownId = params.godownId;
-  const productId = params.productId;
+  const { godownId, productId } = use(params);
 
   const [idToken, setIdToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,8 +99,8 @@ export default function ProductDetailPage({
   };
 
   return (
-    <div className="app-shell">
-      <div className="px-4 md:px-8 py-6 space-y-6">
+    <AppShell title="Product" subtitle="Stock movements">
+      <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <Link
@@ -244,7 +244,7 @@ export default function ProductDetailPage({
           </table>
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
 

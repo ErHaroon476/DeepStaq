@@ -5,9 +5,12 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
-import { LogoutButton } from "@/components/ui/logout-button";
+import { AppShell } from "@/components/layout/app-shell";
 
-type ReportType = "daily" | "weekly" | "monthly" | "yearly";
+type Godown = {
+  id: string;
+  name: string;
+};
 
 type ReportRow = {
   key: string;
@@ -20,9 +23,10 @@ type ReportRow = {
 export default function ReportsPage() {
   const { user } = useAuth();
   const [idToken, setIdToken] = useState<string | null>(null);
-  const [type, setType] = useState<ReportType>("daily");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [godowns, setGodowns] = useState<Godown[]>([]);
+  const [godownId, setGodownId] = useState<string>("");
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -33,11 +37,29 @@ export default function ReportsPage() {
     });
   }, [user]);
 
+  useEffect(() => {
+    if (!idToken) return;
+    const loadGodowns = async () => {
+      try {
+        const res = await fetch("/api/godowns", {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        setGodowns((await res.json()) as Godown[]);
+      } catch {
+        toast.error("Failed to load godowns");
+      }
+    };
+    loadGodowns();
+  }, [idToken]);
+
   const load = async () => {
     if (!idToken || !from || !to) return;
     try {
       setLoading(true);
-      const url = `/api/reports?type=${type}&from=${from}&to=${to}`;
+      const url = `/api/reports?type=monthly&from=${from}&to=${to}${
+        godownId ? `&godownId=${encodeURIComponent(godownId)}` : ""
+      }`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${idToken}` },
       });
@@ -66,7 +88,7 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `deepstaq-${type}-report.csv`;
+    a.download = "deepstaq-monthly-report.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -84,7 +106,7 @@ export default function ReportsPage() {
     );
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
-    XLSX.writeFile(workbook, `deepstaq-${type}-report.xlsx`);
+    XLSX.writeFile(workbook, "deepstaq-monthly-report.xlsx");
   };
 
   const exportPDF = () => {
@@ -93,7 +115,7 @@ export default function ReportsPage() {
     doc.setFontSize(14);
     doc.text("DeepStaq Inventory Report", 14, 16);
     doc.setFontSize(10);
-    doc.text(`Type: ${type.toUpperCase()}`, 14, 22);
+    doc.text("Type: MONTHLY", 14, 22);
 
     const headers = ["Period", "Opening", "In", "Out", "Closing"];
     let y = 30;
@@ -108,53 +130,12 @@ export default function ReportsPage() {
       y += 4;
     });
 
-    doc.save(`deepstaq-${type}-report.pdf`);
+    doc.save("deepstaq-monthly-report.pdf");
   };
 
   return (
-    <div className="app-shell flex">
-      {/* Sidebar (same structure as dashboard for consistency) */}
-      <aside className="hidden md:flex md:w-60 flex-col border-r sidebar px-5 py-6">
-        <div className="mb-8">
-          <div className="text-xs font-semibold tracking-widest text-indigo-400 uppercase">
-            DeepStaq
-          </div>
-          <div className="mt-1 text-[11px] text-slate-500">
-            Inventory & Godown Suite
-          </div>
-        </div>
-        <nav className="space-y-1 text-sm">
-          <a
-            href="/dashboard"
-            className="sidebar-link block rounded-lg px-3 py-2"
-          >
-            Dashboard
-          </a>
-          <a
-            href="/godowns"
-            className="sidebar-link block rounded-lg px-3 py-2"
-          >
-            Godowns & Products
-          </a>
-          <a
-            href="/reports"
-            className="sidebar-link-active flex items-center justify-between rounded-lg px-3 py-2"
-          >
-            <span>Reports & Exports</span>
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          </a>
-        </nav>
-        <div className="mt-auto pt-4 border-t app-border">
-          <div className="pb-2">
-            <LogoutButton />
-          </div>
-          <div className="pt-3 text-[11px] text-subtle">
-            Designed for auditors and finance teams.
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex-1 px-4 md:px-8 py-6">
+    <AppShell title="Reports" subtitle="Generate and export reports">
+      <div>
         <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Reporting workspace</h1>
@@ -165,14 +146,16 @@ export default function ReportsPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <select
-              value={type}
-              onChange={(e) => setType(e.target.value as ReportType)}
+              value={godownId}
+              onChange={(e) => setGodownId(e.target.value)}
               className="rounded-md border app-border app-surface px-2 py-1"
             >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
+              <option value="">All Godowns</option>
+              {godowns.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
             </select>
             <input
               type="date"
@@ -276,7 +259,7 @@ export default function ReportsPage() {
           </div>
         </main>
       </div>
-    </div>
+    </AppShell>
   );
 }
 

@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import toast from "react-hot-toast";
-import { Pencil, Plus } from "lucide-react";
-import { LogoutButton } from "@/components/ui/logout-button";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { AppShell } from "@/components/layout/app-shell";
 
 type Godown = {
   id: string;
@@ -77,6 +77,26 @@ export default function GodownsPage() {
     }
   };
 
+  const handleDelete = async (g: Godown) => {
+    if (!idToken) return;
+    const ok = window.confirm(`Delete godown "${g.name}"? This cannot be undone.`);
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/godowns/${g.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setItems((prev) => prev.filter((x) => x.id !== g.id));
+      toast.success("Godown deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete godown");
+    }
+  };
+
   const openEdit = (g: Godown) => {
     setEditing(g);
     setName(g.name);
@@ -112,49 +132,8 @@ export default function GodownsPage() {
   };
 
   return (
-    <div className="app-shell flex">
-      {/* Sidebar for consistent SaaS layout */}
-      <aside className="hidden md:flex md:w-60 flex-col border-r sidebar px-5 py-6">
-        <div className="mb-8">
-          <div className="text-xs font-semibold tracking-widest text-indigo-400 uppercase">
-            DeepStaq
-          </div>
-          <div className="mt-1 text-[11px] text-slate-500">
-            Inventory & Godown Suite
-          </div>
-        </div>
-        <nav className="space-y-1 text-sm">
-          <a
-            href="/dashboard"
-            className="sidebar-link block rounded-lg px-3 py-2"
-          >
-            Dashboard
-          </a>
-          <a
-            href="/godowns"
-            className="sidebar-link-active flex items-center justify-between rounded-lg px-3 py-2"
-          >
-            <span>Godowns & Products</span>
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          </a>
-          <a
-            href="/reports"
-            className="sidebar-link block rounded-lg px-3 py-2"
-          >
-            Reports & Exports
-          </a>
-        </nav>
-        <div className="mt-auto pt-4 border-t app-border">
-          <div className="pb-2">
-            <LogoutButton />
-          </div>
-          <div className="pt-3 text-[11px] text-subtle">
-            Configure warehouses, units, and companies.
-          </div>
-        </div>
-      </aside>
-
-      <div className="flex-1 px-4 md:px-8 py-6">
+    <AppShell title="Godowns" subtitle="Warehouses, units, companies, products">
+      <div>
         <header className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Godowns</h1>
@@ -198,14 +177,24 @@ export default function GodownsPage() {
                         Open to manage companies, products, and stock movements.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(g)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
-                      aria-label="Rename godown"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(g)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                        aria-label="Rename godown"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(g)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                        aria-label="Delete godown"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                   {g.description && (
                     <p className="mt-1 text-xs text-slate-400">
@@ -322,7 +311,7 @@ export default function GodownsPage() {
           </div>
         </div>
       )}
-    </div>
+    </AppShell>
   );
 }
 

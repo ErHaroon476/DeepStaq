@@ -10,9 +10,9 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const { name, description } = body as {
+  const { name, has_open_pieces } = body as {
     name?: string;
-    description?: string | null;
+    has_open_pieces?: boolean;
   };
 
   if (!name || !name.trim()) {
@@ -20,10 +20,10 @@ export async function PATCH(
   }
 
   const { data, error } = await supabaseServer
-    .from("godowns")
+    .from("unit_types")
     .update({
       name: name.trim(),
-      description: description ?? null,
+      has_open_pieces: has_open_pieces ?? false,
     })
     .eq("id", id)
     .eq("user_id", user.uid)
@@ -31,14 +31,15 @@ export async function PATCH(
     .single();
 
   if (error) {
-    console.error("[DeepStaq] Failed to update godown", error);
-    return new Response((error as any)?.message || "Unable to update godown.", {
-      status: 500,
-    });
+    console.error("[DeepStaq] Failed to update unit type", error);
+    return new Response(
+      (error as any)?.message || "Unable to update unit type.",
+      { status: 500 },
+    );
   }
 
   if (!data) {
-    return new Response("Godown not found", { status: 404 });
+    return new Response("Unit type not found", { status: 404 });
   }
 
   return Response.json(data);
@@ -52,22 +53,22 @@ export async function DELETE(
   const { id } = await params;
 
   const { error, count } = await supabaseServer
-    .from("godowns")
+    .from("unit_types")
     .delete({ count: "exact" })
     .eq("id", id)
     .eq("user_id", user.uid);
 
   if (error) {
-    console.error("[DeepStaq] Failed to delete godown", error);
-    return new Response((error as any)?.message || "Unable to delete godown.", {
-      status: 500,
-    });
+    console.error("[DeepStaq] Failed to delete unit type", error);
+    return new Response(
+      (error as any)?.message || "Unable to delete unit type.",
+      { status: 500 },
+    );
   }
 
   if (!count) {
-    return new Response("Godown not found", { status: 404 });
+    return new Response("Unit type not found", { status: 404 });
   }
 
   return new Response(null, { status: 204 });
 }
-

@@ -25,9 +25,14 @@ function VerifyEmailInner() {
         const code = oobCode as string;
         await checkActionCode(auth, code);
         await applyActionCode(auth, code);
+        try {
+          localStorage.setItem("deepstaq_email_verified", "1");
+          localStorage.removeItem("deepstaq_verify_modal_open");
+          localStorage.removeItem("deepstaq_verify_pending_email");
+        } catch {}
         setStatus("success");
         toast.success("Email verified. You can now sign in.");
-        setTimeout(() => router.replace("/dashboard"), 1500);
+        setTimeout(() => router.replace("/login"), 1500);
       } catch {
         setStatus("error");
         toast.error("Verification link is invalid or expired.");
