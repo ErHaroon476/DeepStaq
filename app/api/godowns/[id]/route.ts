@@ -2,6 +2,13 @@ import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authServer";
 
+interface SupabaseError {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -32,7 +39,7 @@ export async function PATCH(
 
   if (error) {
     console.error("[DeepStaq] Failed to update godown", error);
-    return new Response((error as any)?.message || "Unable to update godown.", {
+    return new Response((error as SupabaseError)?.message || "Unable to update godown.", {
       status: 500,
     });
   }
@@ -59,7 +66,7 @@ export async function DELETE(
 
   if (error) {
     console.error("[DeepStaq] Failed to delete godown", error);
-    return new Response((error as any)?.message || "Unable to delete godown.", {
+    return new Response((error as SupabaseError)?.message || "Unable to delete godown.", {
       status: 500,
     });
   }

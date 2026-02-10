@@ -1,16 +1,6 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f5f5f8;
-  --foreground: #020617;
-  --surface: #ffffff;
-  --surface-muted: #e5e7eb;
-  --border-subtle: #e2e8f0;
-  --text-muted: #4b5563;
-  --text-subtle: #6b7280;
-}
-
-:root[data-theme="dark"] {
   --background: #020617;
   --foreground: #e5e7eb;
   --surface: #020617;
@@ -18,16 +8,6 @@
   --border-subtle: #1f2937;
   --text-muted: #e5e7eb;
   --text-subtle: #9ca3af;
-}
-
-:root[data-theme="light"] {
-  --background: #f5f5f8;
-  --foreground: #020617;
-  --surface: #ffffff;
-  --surface-muted: #e5e7eb;
-  --border-subtle: #e2e8f0;
-  --text-muted: #4b5563;
-  --text-subtle: #6b7280;
 }
 
 @theme inline {
@@ -99,6 +79,57 @@ body {
   color: #e5e7eb;
 }
 
+/* Theme-aware gradient backgrounds */
+:root[data-theme="light"] .gradient-dark {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+:root[data-theme="light"] .gradient-surface {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+}
+
+:root[data-theme="dark"] .gradient-dark {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+:root[data-theme="dark"] .gradient-surface {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+/* Theme-aware text colors */
+:root[data-theme="light"] .text-primary {
+  color: #1e293b;
+}
+
+:root[data-theme="light"] .text-secondary {
+  color: #475569;
+}
+
+:root[data-theme="dark"] .text-primary {
+  color: #f1f5f9;
+}
+
+:root[data-theme="dark"] .text-secondary {
+  color: #94a3b8;
+}
+
+/* Disable Recharts hover effects */
+.recharts-wrapper .recharts-bar-rectangle:hover {
+  filter: none !important;
+  transform: none !important;
+}
+
+.recharts-wrapper .recharts-bar-rectangle {
+  transition: none !important;
+}
+
+.recharts-tooltip {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  color: var(--foreground) !important;
+}
+
 .alert-critical-tile {
   background-color: #fee2e2;
   border-color: #fecaca;
@@ -109,4 +140,19 @@ body {
   background-color: #7f1d1d;
   border-color: #b91c1c;
   color: #fee2e2;
+}
+
+/* Mobile responsive fixes */
+@media (max-width: 640px) {
+  .mobile-full-width {
+    width: 100% !important;
+  }
+  
+  .mobile-center {
+    justify-content: center !important;
+  }
+  
+  .mobile-stack {
+    flex-direction: column !important;
+  }
 }

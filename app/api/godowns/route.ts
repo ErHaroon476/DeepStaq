@@ -2,6 +2,11 @@ import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authServer";
 
+interface SupabaseError {
+  code?: string;
+  message?: string;
+}
+
 export async function GET() {
   const user = await requireUser();
 
@@ -13,8 +18,8 @@ export async function GET() {
 
   if (error) {
     // If the table doesn't exist yet (e.g. schema not applied), fail soft and return empty.
-    const code = (error as any)?.code;
-    const message = (error as any)?.message as string | undefined;
+    const code = (error as SupabaseError)?.code;
+    const message = (error as SupabaseError)?.message;
     console.error("[DeepStaq] Failed to load godowns", error);
     if (
       code === "42P01" ||
@@ -52,8 +57,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    const code = (error as any)?.code;
-    const message = (error as any)?.message as string | undefined;
+    const code = (error as SupabaseError)?.code;
+    const message = (error as SupabaseError)?.message;
     console.error("[DeepStaq] Failed to create godown", error);
     if (
       code === "42P01" ||

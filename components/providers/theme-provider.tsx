@@ -17,7 +17,6 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   toggleTheme: () => {},
 });
 
@@ -31,21 +30,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
-    const stored =
-      (typeof window !== "undefined" &&
-        (window.localStorage.getItem(STORAGE_KEY) as Theme | null)) ||
-      null;
+    if (typeof window === "undefined") return;
+    
+    const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
     if (stored === "light" || stored === "dark") {
-      setTheme(stored);
-      document.documentElement.setAttribute("data-theme", stored);
+      setTimeout(() => {
+        setTheme(stored);
+        document.documentElement.setAttribute("data-theme", stored);
+      }, 0);
     } else {
       // Fall back to system preference
       const prefersDark = window.matchMedia(
         "(prefers-color-scheme: dark)",
       ).matches;
       const initial: Theme = prefersDark ? "dark" : "light";
-      setTheme(initial);
-      document.documentElement.setAttribute("data-theme", initial);
+      setTimeout(() => {
+        setTheme(initial);
+        document.documentElement.setAttribute("data-theme", initial);
+      }, 0);
     }
   }, []);
 

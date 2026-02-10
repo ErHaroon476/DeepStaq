@@ -2,6 +2,58 @@ import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authServer";
 
+interface SupabaseError {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+}
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const user = await requireUser();
+  const { id } = await params;
+
+  const { data, error } = await supabaseServer
+    .from("products")
+    .select(`
+      *,
+      companies!inner(name),
+      unit_types!inner(name)
+    `)
+    .eq("id", id)
+    .eq("user_id", user.uid)
+    .single();
+
+  if (error) {
+    console.error("[DeepStaq] Failed to fetch product", error);
+    return new Response((error as SupabaseError)?.message || "Unable to fetch product.", {
+      status: 500,
+    });
+  }
+
+  if (!data) {
+    return new Response("Product not found", { status: 404 });
+  }
+
+  // Transform the data to match the expected format
+  const transformedData = {
+    id: data.id,
+    name: data.name,
+    current_stock: data.current_stock,
+    opening_stock: data.opening_stock,
+    sku: data.sku,
+    company_id: data.company_id,
+    unit_type_id: data.unit_type_id,
+    company_name: data.companies?.name || "Unknown",
+    unit_name: data.unit_types?.name || "Unknown",
+  };
+
+  return Response.json(transformedData);
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -54,7 +106,7 @@ export async function PATCH(
 
   if (error) {
     console.error("[DeepStaq] Failed to update product", error);
-    return new Response((error as any)?.message || "Unable to update product.", {
+    return new Response((error as SupabaseError)?.message || "Unable to update product.", {
       status: 500,
     });
   }
@@ -81,7 +133,7 @@ export async function DELETE(
 
   if (error) {
     console.error("[DeepStaq] Failed to delete product", error);
-    return new Response((error as any)?.message || "Unable to delete product.", {
+    return new Response((error as SupabaseError)?.message || "Unable to delete product.", {
       status: 500,
     });
   }

@@ -4,8 +4,18 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { use, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import Link from "next/link";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, BarChart3 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type UnitType = {
   id: string;
@@ -27,6 +37,18 @@ type Product = {
   unit_type_id: string;
 };
 
+type StockAnalytics = {
+  total_opening_stock: number;
+  total_current_stock: number;
+  total_stock_in: number;
+  total_stock_out: number;
+  series: Array<{
+    date: string;
+    stock_in: number;
+    stock_out: number;
+  }>;
+};
+
 export default function GodownDetailPage({
   params,
 }: {
@@ -39,10 +61,17 @@ export default function GodownDetailPage({
   const [units, setUnits] = useState<UnitType[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stockAnalytics, setStockAnalytics] = useState<StockAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
     "overview" | "units" | "companies" | "products"
   >("overview");
+
+  // Date range for analytics
+  const [range, setRange] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
 
   // create unit
   const [unitOpen, setUnitOpen] = useState(false);
@@ -84,6 +113,32 @@ export default function GodownDetailPage({
     if (!idToken) return undefined;
     return { Authorization: `Bearer ${idToken}` };
   }, [idToken]);
+
+  const loadStockAnalytics = async () => {
+    if (!headers) return;
+    
+    // Don't call API for custom range if dates aren't provided
+    if (range === "custom" && (!from || !to)) {
+      console.log("[DeepStaq] Skipping analytics call - custom range requires dates");
+      return;
+    }
+    
+    try {
+      setAnalyticsLoading(true);
+      const params = new URLSearchParams({ godownId, range });
+      if (range === "custom" && from && to) {
+        params.set("from", from);
+        params.set("to", to);
+      }
+      const res = await fetch(`/api/stock-analytics?${params}`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      setStockAnalytics(await res.json());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load analytics");
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
 
   const loadAll = async () => {
     if (!headers) return;
@@ -159,6 +214,12 @@ export default function GodownDetailPage({
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, godownId]);
+
+  useEffect(() => {
+    if (!headers) return;
+    loadStockAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers, godownId, range, from, to]);
 
   const createUnit = async () => {
     if (!headers || !unitName.trim()) return;
@@ -339,7 +400,7 @@ export default function GodownDetailPage({
   };
 
   return (
-    <AppShell title="Godown" subtitle="Units, companies, products">
+    <AppShell>
       <div>
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
@@ -373,24 +434,203 @@ export default function GodownDetailPage({
         </div>
 
         {activeTab === "overview" && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border app-border app-surface p-4">
-              <p className="text-[11px] uppercase tracking-wide text-subtle">
-                Units
-              </p>
-              <p className="mt-1 text-xl font-semibold">{units.length}</p>
+          <div className="space-y-6">
+            {/* Enhanced KPIs */}
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="group rounded-2xl border app-border app-surface p-4 hover:shadow-lg transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-subtle">Units</p>
+                    <p className="mt-1 text-2xl font-bold">{units.length}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-500/20 group-hover:scale-110 transition-transform">
+                    <Boxes className="h-5 w-5 text-blue-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="group rounded-2xl border app-border app-surface p-4 hover:shadow-lg transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-subtle">Companies</p>
+                    <p className="mt-1 text-2xl font-bold">{companies.length}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 group-hover:scale-110 transition-transform">
+                    <Building2 className="h-5 w-5 text-green-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="group rounded-2xl border app-border app-surface p-4 hover:shadow-lg transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-subtle">Products</p>
+                    <p className="mt-1 text-2xl font-bold">{products.length}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 group-hover:scale-110 transition-transform">
+                    <Package className="h-5 w-5 text-purple-500" />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="rounded-2xl border app-border app-surface p-4">
-              <p className="text-[11px] uppercase tracking-wide text-subtle">
-                Companies
-              </p>
-              <p className="mt-1 text-xl font-semibold">{companies.length}</p>
-            </div>
-            <div className="rounded-2xl border app-border app-surface p-4">
-              <p className="text-[11px] uppercase tracking-wide text-subtle">
-                Products
-              </p>
-              <p className="mt-1 text-xl font-semibold">{products.length}</p>
+
+            {/* Stock Analytics */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Stock KPIs */}
+              <div className="rounded-2xl border app-border app-surface p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500/20 to-red-500/20">
+                      <BarChart3 className="h-5 w-5 text-orange-500" />
+                    </div>
+                    <h2 className="text-sm font-semibold">Stock Analytics</h2>
+                  </div>
+                  {analyticsLoading && (
+                    <span className="text-[11px] text-subtle">Loading…</span>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-subtle">Total Opening Stock</div>
+                    <div className="text-xl font-bold text-blue-600">
+                      {stockAnalytics?.total_opening_stock?.toFixed(3) || "0.000"}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-subtle">Current Stock</div>
+                    <div className="text-xl font-bold text-green-600">
+                      {stockAnalytics?.total_current_stock?.toFixed(3) || "0.000"}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-subtle">Total Stock IN</div>
+                    <div className="text-xl font-bold text-emerald-600">
+                      +{stockAnalytics?.total_stock_in?.toFixed(3) || "0.000"}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-subtle">Total Stock OUT</div>
+                    <div className="text-xl font-bold text-red-600">
+                      -{stockAnalytics?.total_stock_out?.toFixed(3) || "0.000"}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Show message when no data */}
+                {stockAnalytics && stockAnalytics.total_stock_in === 0 && stockAnalytics.total_stock_out === 0 && (
+                  <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-center">
+                    <p className="text-xs text-subtle">
+                      {stockAnalytics.total_opening_stock === 0 
+                        ? "No stock activity in this period" 
+                        : "No stock movements in this period"}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Stock Movement Graph */}
+              <div className="rounded-2xl border app-border app-surface p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20">
+                      <TrendingUp className="h-5 w-5 text-cyan-500" />
+                    </div>
+                    <h2 className="text-sm font-semibold">Stock Movement Trends</h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={range}
+                      onChange={(e) => setRange(e.target.value as "daily" | "weekly" | "monthly" | "yearly" | "custom")}
+                      className="text-xs rounded-md border app-border app-surface px-2 py-1"
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+                </div>
+
+                {range === "custom" && (
+                  <div className="mb-4 flex items-center gap-2 text-xs">
+                    <input
+                      type="date"
+                      value={from}
+                      onChange={(e) => setFrom(e.target.value)}
+                      className="rounded-md border app-border app-surface px-2 py-1 [&::-webkit-calendar-picker-indicator]:text-black [&::-webkit-calendar-picker-indicator]:dark:text-white dark:[&::-webkit-calendar-picker-indicator]:text-white"
+                      placeholder="From date"
+                    />
+                    <span>to</span>
+                    <input
+                      type="date"
+                      value={to}
+                      onChange={(e) => setTo(e.target.value)}
+                      className="rounded-md border app-border app-surface px-2 py-1 [&::-webkit-calendar-picker-indicator]:text-black [&::-webkit-calendar-picker-indicator]:dark:text-white dark:[&::-webkit-calendar-picker-indicator]:text-white"
+                      placeholder="To date"
+                    />
+                  </div>
+                )}
+
+                <div className="h-64 bg-transparent">
+                  {stockAnalytics?.series && stockAnalytics.series.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart 
+                        data={stockAnalytics.series}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{ fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={{ className: "opacity-30" }}
+                        />
+                        <YAxis 
+                          tick={{ fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={{ className: "opacity-30" }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: "var(--app-surface)",
+                            border: "1px solid var(--app-border)",
+                            borderRadius: "8px",
+                            fontSize: "11px"
+                          }}
+                        />
+                        <Legend 
+                          wrapperStyle={{ fontSize: "11px" }}
+                        />
+                        <Bar 
+                          dataKey="stock_in" 
+                          fill="#10b981" 
+                          name="Stock IN"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={300}
+                        />
+                        <Bar 
+                          dataKey="stock_out" 
+                          fill="#ef4444" 
+                          name="Stock OUT"
+                          radius={[4, 4, 0, 0]}
+                          animationDuration={300}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-4xl mb-2">📊</div>
+                        <p className="text-xs text-subtle">
+                          {stockAnalytics?.total_stock_in === 0 && stockAnalytics?.total_stock_out === 0
+                            ? "No stock movements in this period"
+                            : "No data to display"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}

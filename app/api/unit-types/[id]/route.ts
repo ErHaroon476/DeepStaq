@@ -2,6 +2,13 @@ import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authServer";
 
+interface SupabaseError {
+  message: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -33,7 +40,7 @@ export async function PATCH(
   if (error) {
     console.error("[DeepStaq] Failed to update unit type", error);
     return new Response(
-      (error as any)?.message || "Unable to update unit type.",
+      (error as SupabaseError)?.message || "Unable to update unit type.",
       { status: 500 },
     );
   }
@@ -61,7 +68,7 @@ export async function DELETE(
   if (error) {
     console.error("[DeepStaq] Failed to delete unit type", error);
     return new Response(
-      (error as any)?.message || "Unable to delete unit type.",
+      (error as SupabaseError)?.message || "Unable to delete unit type.",
       { status: 500 },
     );
   }

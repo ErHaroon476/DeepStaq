@@ -3,6 +3,25 @@ import { requireUser } from "@/lib/authServer";
 import dayjs from "dayjs";
 import { NextRequest } from "next/server";
 
+interface Product {
+  id: string;
+  cost_price?: number;
+}
+
+interface StockMovement {
+  type: "IN" | "OUT";
+  quantity: number;
+  movement_date: string;
+  product_id: string;
+}
+
+interface StockRow {
+  product_id: string;
+  godown_id: string;
+  name: string;
+  current_stock: number;
+}
+
 export async function GET(req: NextRequest) {
   const user = await requireUser();
   const { searchParams } = new URL(req.url);
@@ -86,7 +105,7 @@ export async function GET(req: NextRequest) {
       console.error("[DeepStaq] Failed to load products for cost", productsError);
     } else {
       costMap =
-        productsForCost?.reduce((acc: Record<string, number>, p: any) => {
+        productsForCost?.reduce((acc: Record<string, number>, p: Product) => {
           if (p.cost_price != null) {
             acc[p.id] = Number(p.cost_price);
           }
@@ -97,7 +116,7 @@ export async function GET(req: NextRequest) {
     console.error("[DeepStaq] Error while building product cost map", err);
   }
 
-  stockMovements?.forEach((m: any) => {
+  stockMovements?.forEach((m: StockMovement) => {
     const key = dayjs(m.movement_date).format("YYYY-MM-DD");
     if (!seriesMap[key]) {
       seriesMap[key] = { date: key, in: 0, out: 0 };
@@ -135,7 +154,7 @@ export async function GET(req: NextRequest) {
       console.error("[DeepStaq] Failed to load product current stock", stockError);
     } else {
       alerts =
-        stockRows?.map((r: any) => {
+        stockRows?.map((r: StockRow) => {
           const current = Number(r.current_stock ?? 0);
           const alert_type = current <= 0 ? "EMPTY" : current < 3 ? "LOW" : "OK";
           return {
