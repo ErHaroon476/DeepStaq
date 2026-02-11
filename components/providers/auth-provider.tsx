@@ -23,7 +23,6 @@ export function useAuth() {
 const publicRoutes = [
   "/login",
   "/register",
-  "/verify-email",
   "/reset-password",
   "/get-started",
 ];
@@ -41,15 +40,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!firebaseUser && !publicRoutes.includes(pathname)) {
         router.replace("/login");
-      }
-
-      if (
-        firebaseUser &&
-        !firebaseUser.emailVerified &&
-        !publicRoutes.includes(pathname) &&
-        pathname !== "/verify-email"
-      ) {
-        router.replace("/verify-email");
       }
 
       if (firebaseUser && publicRoutes.includes(pathname) && pathname !== "/get-started") {
