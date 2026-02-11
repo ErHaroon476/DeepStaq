@@ -38,15 +38,20 @@ export async function GET(request: NextRequest) {
 
     const listUsersResult = await adminAuth.listUsers();
     
-    const users = listUsersResult.users.map(user => ({
-      uid: user.uid,
-      email: user.email,
-      emailVerified: user.emailVerified,
-      metadata: {
-        creationTime: user.metadata.creationTime,
-        lastSignInTime: user.metadata.lastSignInTime,
-      },
-    }));
+    const users = listUsersResult.users.map(user => {
+      // Get custom claims to determine role
+      const customClaims = user.customClaims || {};
+      return {
+        uid: user.uid,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        role: customClaims.role || 'user',
+        metadata: {
+          creationTime: user.metadata.creationTime,
+          lastSignInTime: user.metadata.lastSignInTime,
+        },
+      };
+    });
 
     return NextResponse.json({ users });
   } catch (error) {
@@ -69,7 +74,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password } = await request.json();
+    const { email, password, role = 'user' } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -81,7 +86,11 @@ export async function POST(request: NextRequest) {
     const userRecord = await adminAuth.createUser({
       email,
       password,
+      emailVerified: false, // Start as unverified
     });
+
+    // Set custom claims for role
+    await adminAuth.setCustomUserClaims(userRecord.uid, { role });
 
     return NextResponse.json({
       message: "User created successfully",
@@ -89,6 +98,7 @@ export async function POST(request: NextRequest) {
         uid: userRecord.uid,
         email: userRecord.email,
         emailVerified: userRecord.emailVerified,
+        role,
       },
     });
   } catch (error) {
@@ -111,7 +121,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const { uid, email, password } = await request.json();
+    const { uid, email, password, role } = await request.json();
 
     if (!uid) {
       return NextResponse.json(
@@ -123,7 +133,17 @@ export async function PUT(request: NextRequest) {
     const updateData: any = {};
     if (email) updateData.email = email;
     if (password) updateData.password = password;
+    
     const userRecord = await adminAuth.updateUser(uid, updateData);
+
+    // Update role if provided
+    if (role) {
+      await adminAuth.setCustomUserClaims(uid, { role });
+    }
+
+    // Get updated user with role
+    const updatedUser = await adminAuth.getUser(uid);
+    const customClaims = updatedUser.customClaims || {};
 
     return NextResponse.json({
       message: "User updated successfully",
@@ -131,6 +151,7 @@ export async function PUT(request: NextRequest) {
         uid: userRecord.uid,
         email: userRecord.email,
         emailVerified: userRecord.emailVerified,
+        role: customClaims.role || 'user',
       },
     });
   } catch (error) {
