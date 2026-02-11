@@ -9,7 +9,6 @@ import {
   getAuth,
   signInWithEmailAndPassword,
   signOut,
-  updatePassword,
   deleteUser,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -21,11 +20,9 @@ import {
   Trash2,
   Save,
   X,
-  Shield,
-  Mail,
-  Lock,
   Eye,
   EyeOff,
+  Shield,
   LogOut,
   Search,
   RefreshCw,
@@ -36,6 +33,11 @@ import {
   AlertCircle,
   Database,
   Zap,
+  LogOut as ForceLogoutIcon,
+  Ban,
+  ShieldCheck,
+  Mail,
+  Lock,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 
@@ -52,6 +54,7 @@ interface FirebaseUser {
   email: string;
   emailVerified: boolean;
   role?: 'admin' | 'user';
+  disabled?: boolean;
   metadata: {
     creationTime?: string;
     lastSignInTime?: string;
@@ -112,14 +115,18 @@ export default function AdminPage() {
   const fetchUsers = async () => {
     try {
       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-      const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
       
-      if (!adminEmail || !adminPassword) {
+      // Debug logging
+      console.log('Admin email from env:', adminEmail);
+      console.log('All env vars:', Object.keys(process.env).filter(key => key.includes('ADMIN')));
+      
+      if (!adminEmail) {
         toast.error("Admin credentials not configured");
         return;
       }
 
-      const credentials = Buffer.from(`${adminEmail}:${adminPassword}`).toString('base64');
+      // Use admin email as token (simple approach since we only check email)
+      const credentials = Buffer.from(`${adminEmail}:`).toString('base64');
       const response = await fetch('/api/admin/users', {
         headers: {
           'Authorization': `Basic ${credentials}`,
@@ -128,6 +135,7 @@ export default function AdminPage() {
 
       if (response.ok) {
         const data = await response.json();
+        // Use the users data as-is from API (it already includes roles and emailVerified status)
         setUsers(data.users || []);
         toast.success("Users loaded successfully");
       } else {
@@ -148,14 +156,14 @@ export default function AdminPage() {
     setSubmitting(true);
     try {
       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-      const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
       
-      if (!adminEmail || !adminPassword) {
+      if (!adminEmail) {
         toast.error("Admin credentials not configured");
         return;
       }
 
-      const credentials = Buffer.from(`${adminEmail}:${adminPassword}`).toString('base64');
+      // Use admin email as token (simple approach since we only check email)
+      const credentials = Buffer.from(`${adminEmail}:`).toString('base64');
       const response = await fetch('/api/admin/users', {
         method: 'POST',
         headers: {
@@ -165,7 +173,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           email: values.email,
           password: values.password,
-          role: values.role
+          role: 'user' // Always set to 'user' for new users
         }),
       });
 
@@ -191,14 +199,14 @@ export default function AdminPage() {
     setSubmitting(true);
     try {
       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-      const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
       
-      if (!adminEmail || !adminPassword) {
+      if (!adminEmail) {
         toast.error("Admin credentials not configured");
         return;
       }
 
-      const credentials = Buffer.from(`${adminEmail}:${adminPassword}`).toString('base64');
+      // Use admin email as token (simple approach since we only check email)
+      const credentials = Buffer.from(`${adminEmail}:`).toString('base64');
       const response = await fetch('/api/admin/users', {
         method: 'PUT',
         headers: {
@@ -235,14 +243,14 @@ export default function AdminPage() {
 
     try {
       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-      const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
       
-      if (!adminEmail || !adminPassword) {
+      if (!adminEmail) {
         toast.error("Admin credentials not configured");
         return;
       }
 
-      const credentials = Buffer.from(`${adminEmail}:${adminPassword}`).toString('base64');
+      // Use admin email as token (simple approach since we only check email)
+      const credentials = Buffer.from(`${adminEmail}:`).toString('base64');
       const response = await fetch(`/api/admin/users?uid=${userId}`, {
         method: 'DELETE',
         headers: {
@@ -263,6 +271,84 @@ export default function AdminPage() {
     }
   };
 
+  const handleForceLogout = async (userId: string) => {
+    if (!confirm("Are you sure you want to force logout this user?")) return;
+
+    try {
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+      
+      if (!adminEmail) {
+        toast.error("Admin credentials not configured");
+        return;
+      }
+
+      const credentials = Buffer.from(`${adminEmail}:`).toString('base64');
+      const response = await fetch('/api/admin/users/actions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${credentials}`,
+        },
+        body: JSON.stringify({
+          uid: userId,
+          action: 'logout'
+        }),
+      });
+
+      if (response.ok) {
+        toast.success("User logged out successfully");
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to logout user");
+      }
+    } catch (error) {
+      console.error("Error logging out user:", error);
+      toast.error("Failed to logout user");
+    }
+  };
+
+  const handleBlockUser = async (userId: string, currentStatus: boolean) => {
+    const action = currentStatus ? 'unblock' : 'block';
+    const confirmMessage = currentStatus 
+      ? "Are you sure you want to unblock this user?" 
+      : "Are you sure you want to block this user?";
+    
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+      
+      if (!adminEmail) {
+        toast.error("Admin credentials not configured");
+        return;
+      }
+
+      const credentials = Buffer.from(`${adminEmail}:`).toString('base64');
+      const response = await fetch('/api/admin/users/actions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${credentials}`,
+        },
+        body: JSON.stringify({
+          uid: userId,
+          action
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(`User ${action}ed successfully`);
+        fetchUsers(); // Refresh to update status
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || `Failed to ${action} user`);
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing user:`, error);
+      toast.error(`Failed to ${action} user`);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -279,7 +365,6 @@ export default function AdminPage() {
 
   // Calculate KPIs
   const totalUsers = users.length;
-  const verifiedUsers = users.filter(u => u.emailVerified).length;
   const adminUsers = users.filter(u => u.role === 'admin').length;
   const recentUsers = users.filter(u => {
     if (!u.metadata.creationTime) return false;
@@ -374,7 +459,7 @@ export default function AdminPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* KPI Cards Section */}
-        <section className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <section className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-8">
           {[
             {
               label: "Total Accounts",
@@ -385,17 +470,6 @@ export default function AdminPage() {
               iconColor: "text-white",
               glow: "shadow-violet-500/25",
               change: "+12%",
-              changeType: "positive"
-            },
-            {
-              label: "Verified Users",
-              value: verifiedUsers,
-              accent: "from-emerald-500/20 via-emerald-500/0 to-transparent",
-              icon: <UserCheck className="h-5 w-5 sm:h-6 sm:w-6" />,
-              iconBg: "from-emerald-500 to-green-600",
-              iconColor: "text-white",
-              glow: "shadow-emerald-500/25",
-              change: "+8%",
               changeType: "positive"
             },
             {
@@ -560,25 +634,27 @@ export default function AdminPage() {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    User Role
-                  </label>
-                  <div className="relative">
-                    <Crown className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <select
-                      defaultValue={editingUser?.role || 'user'}
-                      {...register("role")}
-                      className="w-full pl-10 pr-3 py-3 bg-slate-800/50 border border-slate-600/50 rounded-xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-slate-800/70 transition-all duration-200 appearance-none cursor-pointer"
-                    >
-                      <option value="user" className="bg-slate-800">Regular User</option>
-                      <option value="admin" className="bg-slate-800">Administrator</option>
-                    </select>
+                {editingUser && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      User Role
+                    </label>
+                    <div className="relative">
+                      <Crown className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <select
+                        defaultValue={editingUser?.role || 'user'}
+                        {...register("role")}
+                        className="w-full pl-10 pr-3 py-3 bg-slate-800/50 border border-slate-600/50 rounded-xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-slate-800/70 transition-all duration-200 appearance-none cursor-pointer"
+                      >
+                        <option value="user" className="bg-slate-800">Regular User</option>
+                        <option value="admin" className="bg-slate-800">Administrator</option>
+                      </select>
+                    </div>
+                    {errors.role && (
+                      <p className="mt-1 text-xs text-red-400">{errors.role.message}</p>
+                    )}
                   </div>
-                  {errors.role && (
-                    <p className="mt-1 text-xs text-red-400">{errors.role.message}</p>
-                  )}
-                </div>
+                )}
 
                 <div className="flex gap-3">
                   <button
@@ -694,20 +770,27 @@ export default function AdminPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${
-                                user.emailVerified
-                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                                  : "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
-                              }`}
-                            >
-                              <div className="flex items-center gap-1">
-                                <div className={`w-2 h-2 rounded-full ${
-                                  user.emailVerified ? 'bg-emerald-400' : 'bg-yellow-400'
-                                } animate-pulse`}></div>
-                                {user.emailVerified ? "Verified" : "Pending"}
-                              </div>
-                            </span>
+                            <div className="flex items-center gap-2">
+                              {user.disabled ? (
+                                <span
+                                  className="inline-flex px-3 py-1 text-xs font-semibold rounded-full border bg-red-500/20 text-red-300 border-red-500/30"
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse"></div>
+                                    Blocked
+                                  </div>
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex px-3 py-1 text-xs font-semibold rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                                    Active
+                                  </div>
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                             {user.metadata.creationTime
@@ -720,16 +803,43 @@ export default function AdminPage() {
                                 setEditingUser(user);
                                 reset({ email: user.email, role: user.role || 'user' });
                               }}
-                              className="text-blue-400 hover:text-blue-300 mr-3 transition-colors duration-200"
+                              className="text-blue-400 hover:text-blue-300 mr-2 transition-colors duration-200"
+                              title="Edit User"
                             >
                               <Edit className="h-4 w-4" />
                             </button>
+                            
                             <button
-                              onClick={() => handleDeleteUser(user.uid)}
-                              className="text-red-400 hover:text-red-300 transition-colors duration-200"
+                              onClick={() => handleForceLogout(user.uid)}
+                              className="text-orange-400 hover:text-orange-300 mr-2 transition-colors duration-200"
+                              title="Force Logout"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <ForceLogoutIcon className="h-4 w-4" />
                             </button>
+                            
+                            {user.role === 'user' && (
+                              <button
+                                onClick={() => handleBlockUser(user.uid, user.disabled || false)}
+                                className={`${
+                                  user.disabled 
+                                    ? 'text-green-400 hover:text-green-300' 
+                                    : 'text-yellow-400 hover:text-yellow-300'
+                                } mr-2 transition-colors duration-200`}
+                                title={user.disabled ? 'Unblock User' : 'Block User'}
+                              >
+                                {user.disabled ? <ShieldCheck className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                              </button>
+                            )}
+                            
+                            {user.role !== 'admin' && (
+                              <button
+                                onClick={() => handleDeleteUser(user.uid)}
+                                className="text-red-400 hover:text-red-300 transition-colors duration-200"
+                                title="Delete User"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))

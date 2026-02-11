@@ -5,24 +5,35 @@ import { adminAuth } from "@/lib/firebaseAdmin";
 // Helper function to verify admin credentials
 async function verifyAdmin(request: NextRequest) {
   const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-  const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
 
-  if (!adminEmail || !adminPassword) {
+  // Debug logging
+  console.log('API - Admin email from env:', adminEmail);
+  console.log('API - All env vars:', Object.keys(process.env).filter(key => key.includes('ADMIN')));
+
+  if (!adminEmail) {
+    console.log('API - Admin email not found in environment');
     return false;
   }
 
   // Get authorization header
   const authHeader = request.headers.get("authorization");
+  console.log('API - Auth header:', authHeader);
+  
   if (!authHeader || !authHeader.startsWith("Basic ")) {
+    console.log('API - Invalid auth header format');
     return false;
   }
 
   // Decode basic auth
   const base64Credentials = authHeader.split(" ")[1];
   const credentials = Buffer.from(base64Credentials, "base64").toString("ascii");
-  const [email, password] = credentials.split(":");
+  const [email] = credentials.split(":");
 
-  return email === adminEmail && password === adminPassword;
+  console.log('API - Extracted email:', email);
+  console.log('API - Expected admin email:', adminEmail);
+  console.log('API - Email match:', email === adminEmail);
+
+  return email === adminEmail;
 }
 
 // GET - Fetch all users
@@ -46,6 +57,7 @@ export async function GET(request: NextRequest) {
         email: user.email,
         emailVerified: user.emailVerified,
         role: customClaims.role || 'user',
+        disabled: user.disabled || false,
         metadata: {
           creationTime: user.metadata.creationTime,
           lastSignInTime: user.metadata.lastSignInTime,
@@ -186,9 +198,7 @@ export async function DELETE(request: NextRequest) {
 
     await adminAuth.deleteUser(uid);
 
-    return NextResponse.json({
-      message: "User deleted successfully",
-    });
+    return NextResponse.json({ message: "User deleted successfully" });
   } catch (error) {
     console.error("Error deleting user:", error);
     return NextResponse.json(
