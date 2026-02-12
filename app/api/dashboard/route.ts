@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       endDate = today.endOf("month").toISOString();
   }
 
-  const [{ count: godownsCount }, { count: productsCount }] = await Promise.all(
+  const [{ count: godownsCount }, { count: productsCount }, { count: companiesCount }] = await Promise.all(
     [
       supabaseServer
         .from("godowns")
@@ -70,6 +70,10 @@ export async function GET(req: NextRequest) {
         .eq("user_id", user.uid),
       supabaseServer
         .from("products")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.uid),
+      supabaseServer
+        .from("companies")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user.uid),
     ],
@@ -180,6 +184,7 @@ export async function GET(req: NextRequest) {
     kpis: {
       godowns: godownsCount ?? 0,
       products: productsCount ?? 0,
+      companies: companiesCount ?? 0,
       stockIn: totalIn,
       stockOut: totalOut,
       stockValue: totalStockValue,

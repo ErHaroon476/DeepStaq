@@ -78,6 +78,7 @@ export default function GodownsPage() {
   };
 
   const handleDelete = async (g: Godown) => {
+    console.log("Delete button clicked for godown:", g.name, g.id);
     if (!idToken) return;
     const ok = window.confirm(`Delete godown "${g.name}"? This cannot be undone.`);
     if (!ok) return;
@@ -89,10 +90,15 @@ export default function GodownsPage() {
           Authorization: `Bearer ${idToken}`,
         },
       });
-      if (!res.ok) throw new Error(await res.text());
+      
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      
       setItems((prev) => prev.filter((x) => x.id !== g.id));
       toast.success("Godown deleted");
     } catch (err) {
+      console.error("Delete error:", err);
       toast.error(err instanceof Error ? err.message : "Failed to delete godown");
     }
   };
@@ -240,7 +246,7 @@ export default function GodownsPage() {
                         </p>
                       </div>
                       
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <div className="flex items-center gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300">
                         <button
                           type="button"
                           onClick={() => openEdit(g)}
@@ -253,8 +259,9 @@ export default function GodownsPage() {
                         <button
                           type="button"
                           onClick={() => handleDelete(g)}
-                          className="group/btn relative p-1.5 sm:p-2 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 hover:from-red-500/30 hover:to-orange-500/30 transition-all duration-300"
+                          className="group/btn relative p-1.5 sm:p-2 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 hover:from-red-500/30 hover:to-orange-500/30 transition-all duration-300 z-10"
                           aria-label="Delete warehouse"
+                          style={{ pointerEvents: 'auto' }}
                         >
                           <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-400" />
                           <div className="absolute inset-0 bg-gradient-to-br from-red-600 to-orange-600 rounded-xl opacity-0 group-hover/btn:opacity-20 transition-opacity duration-300"></div>

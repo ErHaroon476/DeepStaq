@@ -4,7 +4,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { use, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import Link from "next/link";
-import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, BarChart3 } from "lucide-react";
+import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, BarChart3, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import {
   Bar,
@@ -101,6 +101,10 @@ export default function GodownDetailPage({
   // edit product
   const [productEditOpen, setProductEditOpen] = useState(false);
   const [productEditing, setProductEditing] = useState<Product | null>(null);
+
+  // product filters
+  const [productSearch, setProductSearch] = useState("");
+  const [selectedCompany, setSelectedCompany] = useState<string>("all");
 
   useEffect(() => {
     if (!user) return;
@@ -399,6 +403,27 @@ export default function GodownDetailPage({
     }
   };
 
+  // Filter products based on search and company
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => {
+      const matchesSearch = product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                          (product.sku?.toLowerCase().includes(productSearch.toLowerCase()) ?? false);
+      const matchesCompany = selectedCompany === "all" || product.company_id === selectedCompany;
+      return matchesSearch && matchesCompany;
+    });
+  }, [products, productSearch, selectedCompany]);
+
+  // Get current stock for products
+  const productStocks = useMemo(() => {
+    const stocks: Record<string, number> = {};
+    // For now, return opening stock as current stock
+    // In a real implementation, you'd fetch current stock from stock movements
+    products.forEach((product) => {
+      stocks[product.id] = product.opening_stock;
+    });
+    return stocks;
+  }, [products]);
+
   return (
     <AppShell>
       <div>
@@ -679,11 +704,11 @@ export default function GodownDetailPage({
                           {u.has_open_pieces ? "Yes" : "No"}
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                             <button
                               type="button"
                               onClick={() => openEditUnit(u)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60 sm:hidden"
                               aria-label="Edit unit"
                             >
                               <Pencil className="h-4 w-4" />
@@ -691,11 +716,29 @@ export default function GodownDetailPage({
                             <button
                               type="button"
                               onClick={() => deleteUnit(u)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60 sm:hidden"
                               aria-label="Delete unit"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
+                            <div className="hidden sm:flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditUnit(u)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                                aria-label="Edit unit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteUnit(u)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                                aria-label="Delete unit"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -727,11 +770,13 @@ export default function GodownDetailPage({
                 companies.map((c) => (
                   <div
                     key={c.id}
-                    className="rounded-2xl border app-border app-surface p-4"
+                    className="rounded-2xl border app-border app-surface p-4 sm:p-6"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="text-sm font-semibold">{c.name}</div>
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate">{c.name}</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-shrink-0">
                         <button
                           type="button"
                           onClick={() => openEditCompany(c)}
@@ -759,7 +804,7 @@ export default function GodownDetailPage({
 
         {activeTab === "products" && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-sm font-semibold">Products</h2>
               <button
                 onClick={() => {
@@ -775,6 +820,37 @@ export default function GodownDetailPage({
                 <Plus className="h-3 w-3" /> Add product
               </button>
             </div>
+
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3 p-4 rounded-2xl border app-border app-surface">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+              <div className="sm:w-48">
+                <select
+                  value={selectedCompany}
+                  onChange={(e) => setSelectedCompany(e.target.value)}
+                  className="w-full px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="all">All Companies</option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="rounded-2xl border app-border app-surface overflow-hidden">
               <table className="min-w-full text-xs">
                 <thead className="border-b app-border">
@@ -786,38 +862,52 @@ export default function GodownDetailPage({
                       SKU
                     </th>
                     <th className="px-3 py-2 text-left font-semibold text-subtle">
+                      Current Stock
+                    </th>
+                    <th className="px-3 py-2 text-left font-semibold text-subtle">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {products.length === 0 ? (
+                  {filteredProducts.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={4}
                         className="px-3 py-6 text-center text-subtle"
                       >
-                        No products yet. Add units + company first, then create
-                        products.
+                        {products.length === 0 
+                          ? "No products yet. Add units + company first, then create products."
+                          : "No products match your filters."
+                        }
                       </td>
                     </tr>
                   ) : (
-                    products.map((p) => (
+                    filteredProducts.map((p) => (
                       <tr key={p.id} className="border-b app-border">
                         <td className="px-3 py-2">{p.name}</td>
                         <td className="px-3 py-2">{p.sku ?? "-"}</td>
                         <td className="px-3 py-2">
-                          <div className="flex items-center gap-3">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            productStocks[p.id] > 0 
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-red-500/20 text-red-300 border border-red-500/30"
+                          }`}>
+                            {productStocks[p.id]?.toFixed(3) ?? "0.000"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                             <Link
                               href={`/godowns/${godownId}/products/${p.id}`}
-                              className="text-indigo-600 hover:underline"
+                              className="text-indigo-600 hover:underline sm:hidden"
                             >
                               Open
                             </Link>
                             <button
                               type="button"
                               onClick={() => openEditProduct(p)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60 sm:hidden"
                               aria-label="Edit product"
                             >
                               <Pencil className="h-4 w-4" />
@@ -825,11 +915,35 @@ export default function GodownDetailPage({
                             <button
                               type="button"
                               onClick={() => deleteProduct(p)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60 sm:hidden"
                               aria-label="Delete product"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
+                            <div className="hidden sm:flex items-center gap-2">
+                              <Link
+                                href={`/godowns/${godownId}/products/${p.id}`}
+                                className="text-indigo-600 hover:underline"
+                              >
+                                Open
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => openEditProduct(p)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                                aria-label="Edit product"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteProduct(p)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                                aria-label="Delete product"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>

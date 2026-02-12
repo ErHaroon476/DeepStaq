@@ -15,7 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import Link from "next/link";
-import { Package, Boxes, TrendingUp, TrendingDown, AlertTriangle, BarChart3 } from "lucide-react";
+import { Package, Boxes, TrendingUp, TrendingDown, AlertTriangle, BarChart3, Building2, Settings, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 
 type Range = "daily" | "weekly" | "monthly" | "yearly" | "custom";
@@ -34,6 +34,16 @@ export default function DashboardPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [idToken, setIdToken] = useState<string | null>(null);
+  
+  // Alert settings state
+  const [alertSettingsOpen, setAlertSettingsOpen] = useState(false);
+  const [alertSettings, setAlertSettings] = useState({
+    emptyThreshold: 0,
+    lowThreshold: 3,
+    unitTypes: [] as Array<{ id: string; name: string; emptyThreshold: number; lowThreshold: number }>
+  });
+  const [selectedGodownId, setSelectedGodownId] = useState<string | null>(null);
+  const [godowns, setGodowns] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -44,6 +54,112 @@ export default function DashboardPage() {
         toast.error("Failed to get auth token");
       });
   }, [user]);
+
+  // Load godowns for alert settings
+  useEffect(() => {
+    if (!idToken) return;
+    const loadGodowns = async () => {
+      try {
+        const res = await fetch("/api/godowns", {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setGodowns(data);
+          if (data.length > 0 && !selectedGodownId) {
+            setSelectedGodownId(data[0].id);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load godowns:", error);
+      }
+    };
+    loadGodowns();
+  }, [idToken, selectedGodownId]);
+
+  // Test unit types loading directly
+  useEffect(() => {
+    if (!idToken || !selectedGodownId) return;
+    const testUnitTypes = async () => {
+      try {
+        console.log("[Dashboard] Testing unit types API for godown:", selectedGodownId);
+        const res = await fetch(`/api/unit-types?godownId=${selectedGodownId}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          console.log("[Dashboard] Unit types API response:", data);
+        } else {
+          console.error("[Dashboard] Unit types API failed:", res.status, await res.text());
+        }
+      } catch (error) {
+        console.error("[Dashboard] Unit types API error:", error);
+      }
+    };
+    testUnitTypes();
+  }, [idToken, selectedGodownId]);
+
+  // Load alert settings when godown is selected
+  useEffect(() => {
+    if (!idToken || !selectedGodownId) return;
+    const loadAlertSettings = async () => {
+      try {
+        console.log("[Dashboard] Loading alert settings for godown:", selectedGodownId);
+        const res = await fetch(`/api/alert-settings?godownId=${selectedGodownId}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          console.log("[Dashboard] Loaded alert settings:", data);
+          setAlertSettings({
+            emptyThreshold: data.globalSettings.empty_threshold,
+            lowThreshold: data.globalSettings.low_threshold,
+            unitTypes: data.unitTypes
+          });
+        } else {
+          console.error("[Dashboard] Failed to load alert settings:", res.status);
+        }
+      } catch (error) {
+        console.error("[Dashboard] Failed to load alert settings:", error);
+      }
+    };
+    loadAlertSettings();
+  }, [idToken, selectedGodownId]);
+
+  const saveAlertSettings = async () => {
+    if (!idToken || !selectedGodownId) return;
+    
+    try {
+      console.log("[Dashboard] Saving alert settings to database");
+      
+      const res = await fetch("/api/alert-settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          godownId: selectedGodownId,
+          emptyThreshold: alertSettings.emptyThreshold,
+          lowThreshold: alertSettings.lowThreshold,
+          unitTypes: alertSettings.unitTypes
+        }),
+      });
+      
+      if (res.ok) {
+        console.log("[Dashboard] Alert settings saved to database successfully");
+        toast.success("Alert settings saved");
+        setAlertSettingsOpen(false);
+      } else {
+        const errorText = await res.text();
+        console.error("[Dashboard] Failed to save alert settings:", errorText);
+        toast.error("Failed to save alert settings");
+      }
+    } catch (error) {
+      console.error("[Dashboard] Failed to save alert settings:", error);
+      toast.error("Failed to save alert settings");
+    }
+  };
 
   const params =
     range === "custom" && from && to
@@ -195,7 +311,7 @@ export default function DashboardPage() {
         </section>
 
         {/* KPI Cards */}
-        <section className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+        <section className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[
             {
               label: "Total Godowns",
@@ -205,6 +321,15 @@ export default function DashboardPage() {
               iconBg: "from-indigo-500 to-purple-600",
               iconColor: "text-white",
               glow: "shadow-indigo-500/25"
+            },
+            {
+              label: "Total Companies",
+              value: data?.kpis?.companies ?? 0,
+              accent: "from-orange-500/20 via-orange-500/0 to-transparent",
+              icon: <Building2 className="h-5 w-5 sm:h-6 sm:w-6" />,
+              iconBg: "from-orange-500 to-amber-600",
+              iconColor: "text-white",
+              glow: "shadow-orange-500/25"
             },
             {
               label: "Total Products",
@@ -437,13 +562,22 @@ export default function DashboardPage() {
                   <p className="text-slate-400 text-sm">Priority issues</p>
                 </div>
               </div>
-              {alerts.filter(a => a.alert_type !== 'OK').length > 0 && (
-                <div className="px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
-                  <span className="text-red-300 text-xs font-bold">
-                    {alerts.filter(a => a.alert_type !== 'OK').length}
-                  </span>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {alerts.filter(a => a.alert_type !== 'OK').length > 0 && (
+                  <div className="px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
+                    <span className="text-red-300 text-xs font-bold">
+                      {alerts.filter(a => a.alert_type !== 'OK').length}
+                    </span>
+                  </div>
+                )}
+                <button
+                  onClick={() => setAlertSettingsOpen(true)}
+                  className="p-2 rounded-xl bg-gradient-to-br from-slate-700/50 to-slate-600/50 border border-slate-600/50 hover:from-slate-700/70 hover:to-slate-600/70 transition-all duration-300"
+                  aria-label="Alert settings"
+                >
+                  <Settings className="h-4 w-4 text-slate-300" />
+                </button>
+              </div>
             </div>
             
             <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
@@ -460,7 +594,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ) : (
-                alerts.filter(a => a.alert_type !== 'OK').slice(0, 8).map((a, index) => {
+                alerts.filter(a => a.alert_type !== 'OK').map((a, index) => {
                   const isEmpty = a.alert_type === "EMPTY";
                   const isLow = a.alert_type === "LOW";
                   const dotClass = isEmpty
@@ -481,7 +615,10 @@ export default function DashboardPage() {
                       className={`group block bg-gradient-to-br ${bgClass} rounded-2xl p-4 border transition-all duration-300 hover:scale-[1.02] hover:shadow-lg backdrop-blur-sm`}
                       style={{
                         animationDelay: `${index * 50}ms`,
-                        animation: 'slideInRight 0.4s ease-out forwards'
+                        animationName: 'slideInRight',
+                        animationDuration: '0.4s',
+                        animationTimingFunction: 'ease-out',
+                        animationFillMode: 'forwards'
                       }}
                     >
                       <div className="flex items-center justify-between gap-3">
@@ -545,6 +682,124 @@ export default function DashboardPage() {
             background: rgba(148, 163, 184, 0.5);
           }
         `}</style>
+
+        {/* Alert Settings Modal */}
+        {alertSettingsOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl border border-slate-700/50 p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20">
+                    <Settings className="h-6 w-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Alert Settings</h3>
+                    <p className="text-slate-400 text-sm">Configure alert thresholds by unit type</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAlertSettingsOpen(false)}
+                  className="p-2 rounded-xl bg-slate-700/50 border border-slate-600/50 hover:bg-slate-700/70 transition-colors"
+                >
+                  <X className="h-5 w-5 text-slate-300" />
+                </button>
+              </div>
+
+              {/* Godown Selection */}
+              <div className="mb-6 p-4 rounded-2xl bg-slate-800/50 border border-slate-700/50">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Select Warehouse
+                </label>
+                <select
+                  value={selectedGodownId || ""}
+                  onChange={(e) => setSelectedGodownId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {godowns.map((godown) => (
+                    <option key={godown.id} value={godown.id}>
+                      {godown.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-1">Configure alerts for specific warehouse</p>
+              </div>
+
+              {/* Unit Type Specific Settings */}
+              <div className="mb-6">
+                <h4 className="text-white font-semibold mb-4">Alert Thresholds by Unit Type</h4>
+                <div className="space-y-3">
+                  {alertSettings.unitTypes.map((unitType, index) => (
+                    <div key={unitType.id} className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/50">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="text-white font-medium">{unitType.name}</h5>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                          <span className="text-xs text-slate-400">Active</span>
+                        </div>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Empty Threshold
+                          </label>
+                          <input
+                            type="number"
+                            value={unitType.emptyThreshold}
+                            onChange={(e) => {
+                              const newUnitTypes = [...alertSettings.unitTypes];
+                              newUnitTypes[index].emptyThreshold = Number(e.target.value);
+                              setAlertSettings(prev => ({ ...prev, unitTypes: newUnitTypes }));
+                            }}
+                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Low Threshold
+                          </label>
+                          <input
+                            type="number"
+                            value={unitType.lowThreshold}
+                            onChange={(e) => {
+                              const newUnitTypes = [...alertSettings.unitTypes];
+                              newUnitTypes[index].lowThreshold = Number(e.target.value);
+                              setAlertSettings(prev => ({ ...prev, unitTypes: newUnitTypes }));
+                            }}
+                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="3"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {alertSettings.unitTypes.length === 0 && (
+                    <div className="p-4 rounded-2xl bg-slate-800/30 border border-slate-700/30 text-center">
+                      <p className="text-slate-400 text-sm">No unit types found for this warehouse</p>
+                      <p className="text-slate-500 text-xs mt-1">Add unit types to the warehouse first</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setAlertSettingsOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-700/50 border border-slate-600/50 text-slate-300 hover:bg-slate-700/70 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveAlertSettings}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-300"
+                >
+                  Save Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
