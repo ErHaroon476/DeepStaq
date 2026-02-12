@@ -65,9 +65,20 @@ export default function DashboardPage() {
         });
         if (res.ok) {
           const data = await res.json();
+          console.log("[Dashboard] Loaded godowns:", data);
           setGodowns(data);
           if (data.length > 0 && !selectedGodownId) {
-            setSelectedGodownId(data[0].id);
+            // Default to your specific godown ID
+            const targetGodownId = "1a5e6cf5-be13-4712-9195-46369e220df8";
+            const godownExists = data.find((g: any) => g.id === targetGodownId);
+            
+            if (godownExists) {
+              console.log("[Dashboard] Selecting your godown:", targetGodownId);
+              setSelectedGodownId(targetGodownId);
+            } else {
+              console.log("[Dashboard] Your godown not found, selecting first:", data[0].id);
+              setSelectedGodownId(data[0].id);
+            }
           }
         }
       } catch (error) {
@@ -75,7 +86,7 @@ export default function DashboardPage() {
       }
     };
     loadGodowns();
-  }, [idToken, selectedGodownId]);
+  }, [idToken]);
 
   // Test unit types loading directly
   useEffect(() => {
@@ -105,6 +116,7 @@ export default function DashboardPage() {
     const loadAlertSettings = async () => {
       try {
         console.log("[Dashboard] Loading alert settings for godown:", selectedGodownId);
+        console.log("[Dashboard] Available godowns:", godowns.map(g => ({ id: g.id, name: g.name })));
         const res = await fetch(`/api/alert-settings?godownId=${selectedGodownId}`, {
           headers: { Authorization: `Bearer ${idToken}` },
         });

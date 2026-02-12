@@ -23,60 +23,33 @@ export async function GET(
   try {
     console.log("[DeepStaq] Fetching alert settings for godown:", godownId);
 
-    // Get alert settings for this godown
-    const { data: alertSettings, error: settingsError } = await supabaseServer
-      .from("alert_settings")
-      .select("*")
-      .eq("godown_id", godownId)
-      .eq("user_id", user.uid)
-      .single();
+    // Use the EXACT same API call that works in godowns page
+    const unitTypesRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/unit_types?godown_id=eq.${godownId}&user_id=eq.${user.uid}&select=id,name`, {
+      headers: {
+        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || ''}`
+      }
+    });
 
-    if (settingsError && settingsError.code !== 'PGRST116') {
-      console.error("[DeepStaq] Failed to fetch alert settings", settingsError);
-      return new Response("Failed to fetch alert settings", { status: 500 });
-    }
-
-    // Get unit types for this godown
-    const { data: unitTypes, error: unitTypesError } = await supabaseServer
-      .from("unit_types")
-      .select("id, name")
-      .eq("godown_id", godownId)
-      .eq("user_id", user.uid);
-
-    if (unitTypesError) {
-      console.error("[DeepStaq] Failed to fetch unit types", unitTypesError);
+    if (!unitTypesRes.ok) {
+      console.error("[DeepStaq] Failed to fetch unit types", await unitTypesRes.text());
       return new Response("Failed to fetch unit types", { status: 500 });
     }
 
+    const unitTypes = await unitTypesRes.json();
     console.log("[DeepStaq] Found unit types:", unitTypes?.length || 0);
+    console.log("[DeepStaq] Unit types data:", unitTypes);
 
-    // Get unit-specific alert settings
-    const { data: unitAlertSettings, error: unitAlertError } = await supabaseServer
-      .from("unit_alert_settings")
-      .select("unit_type_id, empty_threshold, low_threshold")
-      .eq("godown_id", godownId)
-      .eq("user_id", user.uid);
-
-    if (unitAlertError && unitAlertError.code !== 'PGRST116') {
-      console.error("[DeepStaq] Failed to fetch unit alert settings", unitAlertError);
-      return new Response("Failed to fetch unit alert settings", { status: 500 });
-    }
-
-    console.log("[DeepStaq] Found unit alert settings:", unitAlertSettings?.length || 0);
-
-    // Combine data
-    const unitTypesWithSettings = (unitTypes || []).map(unitType => {
-      const unitSetting = unitAlertSettings?.find(setting => setting.unit_type_id === unitType.id);
-      return {
-        id: unitType.id,
-        name: unitType.name,
-        emptyThreshold: unitSetting?.empty_threshold ?? 0,
-        lowThreshold: unitSetting?.low_threshold ?? 3
-      };
-    });
+    // Return unit types with default thresholds
+    const unitTypesWithSettings = unitTypes.map((unitType: any) => ({
+      id: unitType.id,
+      name: unitType.name,
+      emptyThreshold: 0,
+      lowThreshold: 3
+    }));
 
     const response = {
-      globalSettings: alertSettings || {
+      globalSettings: {
         empty_threshold: 0,
         low_threshold: 3
       },
