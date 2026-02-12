@@ -78,24 +78,7 @@ export async function POST(
     console.log("[DeepStaq] Saving alert settings for godown:", godownId);
     console.log("[DeepStaq] Settings:", { emptyThreshold, lowThreshold, unitTypesCount: unitTypes?.length });
 
-    // Update or insert global alert settings
-    const { error: settingsError } = await supabaseServer
-      .from("alert_settings")
-      .upsert({
-        godown_id: godownId,
-        user_id: user.uid,
-        empty_threshold: emptyThreshold,
-        low_threshold: lowThreshold
-      }, {
-        onConflict: 'godown_id,user_id'
-      });
-
-    if (settingsError) {
-      console.error("[DeepStaq] Failed to save alert settings", settingsError);
-      return new Response("Failed to save alert settings", { status: 500 });
-    }
-
-    // Update unit-specific settings
+    // Skip alert_settings table for now, only save unit_alert_settings
     if (unitTypes && unitTypes.length > 0) {
       const unitSettingsData = unitTypes.map((unitType: any) => ({
         godown_id: godownId,
