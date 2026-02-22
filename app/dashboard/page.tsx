@@ -2,8 +2,8 @@
 
 import useSWR from "swr";
 import { useAuth } from "@/components/providers/auth-provider";
-import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { useEffect, useMemo, useState } from "react";
+import appToast from "@/lib/toast";
 import {
   Bar,
   BarChart,
@@ -35,15 +35,29 @@ export default function DashboardPage() {
   const [to, setTo] = useState("");
   const [idToken, setIdToken] = useState<string | null>(null);
   
-  // Alert settings state
+  // Alert settings state - using localStorage
   const [alertSettingsOpen, setAlertSettingsOpen] = useState(false);
-  const [alertSettings, setAlertSettings] = useState({
-    emptyThreshold: 0,
-    lowThreshold: 3,
-    unitTypes: [] as Array<{ id: string; name: string; emptyThreshold: number; lowThreshold: number }>
+  const [alertSettings, setAlertSettings] = useState(() => {
+    // Load from localStorage on initial render
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('alertThresholds');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          // Fallback to defaults if JSON is invalid
+        }
+      }
+    }
+    // Default values
+    return {
+      emptyThreshold: 0,
+      lowThreshold: 3
+    };
   });
-  const [selectedGodownId, setSelectedGodownId] = useState<string | null>(null);
-  const [godowns, setGodowns] = useState<any[]>([]);
+
+  // Alert view toggle state
+  const [alertView, setAlertView] = useState<'all' | 'empty' | 'low' | 'optimal'>('all');
 
   useEffect(() => {
     if (!user) return;
@@ -51,125 +65,17 @@ export default function DashboardPage() {
       .getIdToken()
       .then(setIdToken)
       .catch(() => {
-        toast.error("Failed to get auth token");
+        appToast.error(appToast.messages.auth.loginError);
       });
   }, [user]);
 
-  // Load godowns for alert settings
-  useEffect(() => {
-    if (!idToken) return;
-    const loadGodowns = async () => {
-      try {
-        const res = await fetch("/api/godowns", {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          console.log("[Dashboard] Loaded godowns:", data);
-          setGodowns(data);
-          if (data.length > 0 && !selectedGodownId) {
-            // Default to your specific godown ID
-            const targetGodownId = "1a5e6cf5-be13-4712-9195-46369e220df8";
-            const godownExists = data.find((g: any) => g.id === targetGodownId);
-            
-            if (godownExists) {
-              console.log("[Dashboard] Selecting your godown:", targetGodownId);
-              setSelectedGodownId(targetGodownId);
-            } else {
-              console.log("[Dashboard] Your godown not found, selecting first:", data[0].id);
-              setSelectedGodownId(data[0].id);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load godowns:", error);
-      }
-    };
-    loadGodowns();
-  }, [idToken]);
 
-  // Test unit types loading directly
-  useEffect(() => {
-    if (!idToken || !selectedGodownId) return;
-    const testUnitTypes = async () => {
-      try {
-        console.log("[Dashboard] Testing unit types API for godown:", selectedGodownId);
-        const res = await fetch(`/api/unit-types?godownId=${selectedGodownId}`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          console.log("[Dashboard] Unit types API response:", data);
-        } else {
-          console.error("[Dashboard] Unit types API failed:", res.status, await res.text());
-        }
-      } catch (error) {
-        console.error("[Dashboard] Unit types API error:", error);
-      }
-    };
-    testUnitTypes();
-  }, [idToken, selectedGodownId]);
-
-  // Load alert settings when godown is selected
-  useEffect(() => {
-    if (!idToken || !selectedGodownId) return;
-    const loadAlertSettings = async () => {
-      try {
-        console.log("[Dashboard] Loading alert settings for godown:", selectedGodownId);
-        console.log("[Dashboard] Available godowns:", godowns.map(g => ({ id: g.id, name: g.name })));
-        const res = await fetch(`/api/alert-settings?godownId=${selectedGodownId}`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          console.log("[Dashboard] Loaded alert settings:", data);
-          setAlertSettings({
-            emptyThreshold: data.globalSettings.empty_threshold,
-            lowThreshold: data.globalSettings.low_threshold,
-            unitTypes: data.unitTypes
-          });
-        } else {
-          console.error("[Dashboard] Failed to load alert settings:", res.status);
-        }
-      } catch (error) {
-        console.error("[Dashboard] Failed to load alert settings:", error);
-      }
-    };
-    loadAlertSettings();
-  }, [idToken, selectedGodownId]);
-
-  const saveAlertSettings = async () => {
-    if (!idToken || !selectedGodownId) return;
-    
-    try {
-      console.log("[Dashboard] Saving alert settings to database");
-      
-      const res = await fetch("/api/alert-settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          godownId: selectedGodownId,
-          emptyThreshold: alertSettings.emptyThreshold,
-          lowThreshold: alertSettings.lowThreshold,
-          unitTypes: alertSettings.unitTypes
-        }),
-      });
-      
-      if (res.ok) {
-        console.log("[Dashboard] Alert settings saved to database successfully");
-        toast.success("Alert settings saved");
-        setAlertSettingsOpen(false);
-      } else {
-        const errorText = await res.text();
-        console.error("[Dashboard] Failed to save alert settings:", errorText);
-        toast.error("Failed to save alert settings");
-      }
-    } catch (error) {
-      console.error("[Dashboard] Failed to save alert settings:", error);
-      toast.error("Failed to save alert settings");
+  const saveAlertSettings = () => {
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('alertThresholds', JSON.stringify(alertSettings));
+      appToast.success(appToast.messages.settings.alertThresholdsSaved);
+      setAlertSettingsOpen(false);
     }
   };
 
@@ -199,10 +105,32 @@ export default function DashboardPage() {
         }>
       | undefined) ?? [];
 
+  // Calculate alert types client-side based on localStorage thresholds
+  const calculatedAlerts = useMemo(() => {
+    return alerts.map(alert => {
+      const current = Number(alert.current_stock ?? 0);
+      let alertType: "EMPTY" | "LOW" | "OK";
+      
+      if (current <= 0) {
+        alertType = "EMPTY";
+      } else if (current <= alertSettings.lowThreshold) {
+        alertType = "LOW";
+      } else {
+        alertType = "OK";
+      }
+      
+      return {
+        ...alert,
+        alert_type: alertType,
+        current_stock: current
+      };
+    });
+  }, [alerts, alertSettings.lowThreshold]);
+
   useEffect(() => {
     if (error) {
       console.error("Dashboard load error", error);
-      toast.error("Dashboard data is temporarily unavailable.");
+      appToast.error(appToast.messages.data.loadError);
     }
   }, [error]);
 
@@ -372,7 +300,7 @@ export default function DashboardPage() {
             },
             {
               label: "Active Alerts",
-              value: data?.kpis?.alerts ?? 0,
+              value: calculatedAlerts.filter(a => a.alert_type !== 'OK').length,
               accent: "from-violet-500/20 via-violet-500/0 to-transparent",
               icon: <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6" />,
               iconBg: "from-violet-500 to-purple-600",
@@ -575,10 +503,10 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {alerts.filter(a => a.alert_type !== 'OK').length > 0 && (
+                {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type !== 'OK').length > 0 && (
                   <div className="px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
                     <span className="text-red-300 text-xs font-bold">
-                      {alerts.filter(a => a.alert_type !== 'OK').length}
+                      {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type !== 'OK').length}
                     </span>
                   </div>
                 )}
@@ -592,113 +520,217 @@ export default function DashboardPage() {
               </div>
             </div>
             
-            <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
-              {alerts.filter(a => a.alert_type !== 'OK').length === 0 ? (
-                <div className="bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-2xl p-4 border border-emerald-500/20">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/20">
-                      <div className="w-4 h-4 bg-emerald-400 rounded-full"></div>
+            <div className="space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
+              {/* Filter alerts based on view */}
+              {alertView === 'all' || alertView === 'empty' ? (
+                calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'EMPTY').length > 0 && (
+                  <div className="bg-gradient-to-br from-red-500/10 to-red-600/10 rounded-2xl p-4 border border-red-500/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="p-2 rounded-xl bg-gradient-to-br from-red-500/20 to-red-600/20">
+                        <AlertTriangle className="h-4 w-4 text-red-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-red-300 font-semibold text-sm">Empty Stock</h4>
+                        <p className="text-red-400/70 text-xs">Products completely out of stock</p>
+                      </div>
+                      <div className="ml-auto">
+                        <span className="px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
+                          <span className="text-red-300 text-xs font-bold">
+                            {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'EMPTY').length}
+                          </span>
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-emerald-300 font-medium">All Systems Optimal</p>
-                      <p className="text-slate-400 text-sm">No critical issues detected</p>
+                    <div className="space-y-2">
+                      {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'EMPTY').map((a: { alert_type: "EMPTY" | "LOW" | "OK"; product_id: string; godown_id: string; name: string; current_stock: number }, index: number) => (
+                        <Link
+                          key={a.product_id}
+                          href={`/godowns/${a.godown_id}`}
+                          className="group block bg-red-500/5 rounded-xl p-3 border border-red-500/10 transition-all duration-300 hover:bg-red-500/10 hover:border-red-500/20 hover:scale-[1.01]"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse"></div>
+                                <span className="text-white font-medium text-sm truncate">{a.name}</span>
+                              </div>
+                              <div className="text-red-400 text-xs mt-1">
+                                Stock: <span className="font-bold">0.000</span>
+                              </div>
+                            </div>
+                            <div className="px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
+                              <span className="text-red-300 text-xs font-bold">EMPTY</span>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
                     </div>
                   </div>
-                </div>
-              ) : (
-                alerts.filter(a => a.alert_type !== 'OK').map((a, index) => {
-                  const isEmpty = a.alert_type === "EMPTY";
-                  const isLow = a.alert_type === "LOW";
-                  const dotClass = isEmpty
-                    ? "text-red-400"
-                    : isLow
-                      ? "text-orange-400"
-                      : "text-emerald-400";
-                  const bgClass = isEmpty
-                    ? "from-red-500/10 to-red-600/10 border-red-500/20"
-                    : isLow
-                      ? "from-orange-500/10 to-orange-600/10 border-orange-500/20"
-                      : "from-emerald-500/10 to-emerald-600/10 border-emerald-500/20";
+                )
+              ) : null}
 
-                  return (
-                    <Link
-                      key={a.product_id}
-                      href={`/godowns/${a.godown_id}`}
-                      className={`group block bg-gradient-to-br ${bgClass} rounded-2xl p-4 border transition-all duration-300 hover:scale-[1.02] hover:shadow-lg backdrop-blur-sm`}
-                      style={{
-                        animationDelay: `${index * 50}ms`,
-                        animationName: 'slideInRight',
-                        animationDuration: '0.4s',
-                        animationTimingFunction: 'ease-out',
-                        animationFillMode: 'forwards'
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className={`w-2 h-2 rounded-full ${dotClass} animate-pulse`}></div>
-                            <span className="text-white font-medium truncate">{a.name}</span>
-                          </div>
-                          <div className="text-slate-400 text-sm">
-                            Stock: <span className={`font-bold ${isEmpty ? 'text-red-400' : isLow ? 'text-orange-400' : 'text-emerald-400'}`}>
-                              {Number(a.current_stock).toFixed(3)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className={`px-3 py-1.5 rounded-full text-xs font-bold border ${
-                          isEmpty 
-                            ? 'bg-red-500/20 text-red-300 border-red-500/30' 
-                            : isLow 
-                              ? 'bg-orange-500/20 text-orange-300 border-orange-500/30'
-                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                        }`}>
-                          {a.alert_type}
-                        </div>
+              {/* Low Stock Section */}
+              {alertView === 'all' || alertView === 'low' ? (
+                calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'LOW').length > 0 && (
+                  <div className="bg-gradient-to-br from-orange-500/10 to-orange-600/10 rounded-2xl p-4 border border-orange-500/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="p-2 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-600/20">
+                        <AlertTriangle className="h-4 w-4 text-orange-400" />
                       </div>
-                    </Link>
-                  );
-                })
+                      <div>
+                        <h4 className="text-orange-300 font-semibold text-sm">Low Stock</h4>
+                        <p className="text-orange-400/70 text-xs">Products running low on inventory</p>
+                      </div>
+                      <div className="ml-auto">
+                        <span className="px-2 py-1 rounded-full bg-orange-500/20 border border-orange-500/30">
+                          <span className="text-orange-300 text-xs font-bold">
+                            {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'LOW').length}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'LOW').map((a: { alert_type: "EMPTY" | "LOW" | "OK"; product_id: string; godown_id: string; name: string; current_stock: number }, index: number) => (
+                        <Link
+                          key={a.product_id}
+                          href={`/godowns/${a.godown_id}`}
+                          className="group block bg-orange-500/5 rounded-xl p-3 border border-orange-500/10 transition-all duration-300 hover:bg-orange-500/10 hover:border-orange-500/20 hover:scale-[1.01]"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></div>
+                                <span className="text-white font-medium text-sm truncate">{a.name}</span>
+                              </div>
+                              <div className="text-orange-400 text-xs mt-1">
+                                Stock: <span className="font-bold">{Number(a.current_stock).toFixed(3)}</span>
+                              </div>
+                            </div>
+                            <div className="px-2 py-1 rounded-full bg-orange-500/20 border border-orange-500/30">
+                              <span className="text-orange-300 text-xs font-bold">LOW</span>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )
+              ) : null}
+
+              {/* Optimal Stock Section - Now included in All view */}
+              {alertView === 'all' || alertView === 'optimal' ? (
+                calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'OK').length > 0 && (
+                  <div className="bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-2xl p-4 border border-emerald-500/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/20">
+                        <div className="w-4 h-4 bg-emerald-400 rounded-full"></div>
+                      </div>
+                      <div>
+                        <h4 className="text-emerald-300 font-semibold text-sm">Optimal Stock</h4>
+                        <p className="text-emerald-400/70 text-xs">Products above low stock threshold</p>
+                      </div>
+                      <div className="ml-auto">
+                        <span className="px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30">
+                          <span className="text-emerald-300 text-xs font-bold">
+                            {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'OK').length}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'OK').map((a: { alert_type: "EMPTY" | "LOW" | "OK"; product_id: string; godown_id: string; name: string; current_stock: number }, index: number) => (
+                        <Link
+                          key={a.product_id}
+                          href={`/godowns/${a.godown_id}`}
+                          className="group block bg-emerald-500/5 rounded-xl p-3 border border-emerald-500/10 transition-all duration-300 hover:bg-emerald-500/10 hover:border-emerald-500/20 hover:scale-[1.01]"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                                <span className="text-white font-medium text-sm truncate">{a.name}</span>
+                              </div>
+                              <div className="text-emerald-400 text-xs mt-1">
+                                Stock: <span className="font-bold">{Number(a.current_stock).toFixed(3)}</span>
+                              </div>
+                            </div>
+                            <div className="px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30">
+                              <span className="text-emerald-300 text-xs font-bold">OPTIMAL</span>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )
+              ) : null}
+
+              {/* No Alerts State */}
+              {calculatedAlerts.length === 0 && (
+                <div className="bg-gradient-to-br from-emerald-500/10 to-green-500/10 rounded-2xl p-6 border border-emerald-500/20 text-center">
+                  <div className="flex justify-center mb-3">
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/20">
+                      <div className="w-6 h-6 bg-emerald-400 rounded-full"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-emerald-300 font-semibold">All Systems Optimal</p>
+                    <p className="text-slate-400 text-sm mt-1">No critical issues detected</p>
+                  </div>
+                </div>
               )}
+            </div>
+
+            {/* Toggle Buttons - Outside of card */}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => setAlertView('all')}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                  alertView === 'all'
+                    ? 'bg-slate-600 text-white border border-slate-500'
+                    : 'bg-slate-700/50 text-slate-400 border border-slate-600/50 hover:bg-slate-600/50'
+                }`}
+              >
+                All ({calculatedAlerts.length})
+              </button>
+              <button
+                onClick={() => setAlertView('empty')}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                  alertView === 'empty'
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    : 'bg-slate-700/50 text-slate-400 border border-slate-600/50 hover:bg-red-500/10'
+                }`}
+              >
+                Empty ({calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'EMPTY').length})
+              </button>
+              <button
+                onClick={() => setAlertView('low')}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                  alertView === 'low'
+                    ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                    : 'bg-slate-700/50 text-slate-400 border border-slate-600/50 hover:bg-orange-500/10'
+                }`}
+              >
+                Low ({calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'LOW').length})
+              </button>
+              <button
+                onClick={() => setAlertView('optimal')}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                  alertView === 'optimal'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-slate-700/50 text-slate-400 border border-slate-600/50 hover:bg-emerald-500/10'
+                }`}
+              >
+                Optimal ({calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'OK').length})
+              </button>
             </div>
           </div>
         </section>
 
-        {/* Add slideInRight animation */}
-        <style jsx>{`
-          @keyframes slideInRight {
-            from {
-              opacity: 0;
-              transform: translateX(20px);
-            }
-            to {
-              opacity: 1;
-              transform: translateX(0);
-            }
-          }
-          
-          .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-          }
-          
-          .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(148, 163, 184, 0.1);
-            border-radius: 3px;
-          }
-          
-          .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.3);
-            border-radius: 3px;
-          }
-          
-          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(148, 163, 184, 0.5);
-          }
-        `}</style>
-
         {/* Alert Settings Modal */}
         {alertSettingsOpen && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl border border-slate-700/50 p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl border border-slate-700/50 p-6 max-w-md w-full">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20">
@@ -706,7 +738,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-white">Alert Settings</h3>
-                    <p className="text-slate-400 text-sm">Configure alert thresholds by unit type</p>
+                    <p className="text-slate-400 text-sm">Configure alert thresholds</p>
                   </div>
                 </div>
                 <button
@@ -717,85 +749,38 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* Godown Selection */}
-              <div className="mb-6 p-4 rounded-2xl bg-slate-800/50 border border-slate-700/50">
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Select Warehouse
-                </label>
-                <select
-                  value={selectedGodownId || ""}
-                  onChange={(e) => setSelectedGodownId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {godowns.map((godown) => (
-                    <option key={godown.id} value={godown.id}>
-                      {godown.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-400 mt-1">Configure alerts for specific warehouse</p>
-              </div>
-
-              {/* Unit Type Specific Settings */}
-              <div className="mb-6">
-                <h4 className="text-white font-semibold mb-4">Alert Thresholds by Unit Type</h4>
-                <div className="space-y-3">
-                  {alertSettings.unitTypes.map((unitType, index) => (
-                    <div key={unitType.id} className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/50">
-                      <div className="flex items-center justify-between mb-3">
-                        <h5 className="text-white font-medium">{unitType.name}</h5>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                          <span className="text-xs text-slate-400">Active</span>
-                        </div>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Empty Threshold
-                          </label>
-                          <input
-                            type="number"
-                            value={unitType.emptyThreshold}
-                            onChange={(e) => {
-                              const newUnitTypes = [...alertSettings.unitTypes];
-                              newUnitTypes[index].emptyThreshold = Number(e.target.value);
-                              setAlertSettings(prev => ({ ...prev, unitTypes: newUnitTypes }));
-                            }}
-                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="0"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Low Threshold
-                          </label>
-                          <input
-                            type="number"
-                            value={unitType.lowThreshold}
-                            onChange={(e) => {
-                              const newUnitTypes = [...alertSettings.unitTypes];
-                              newUnitTypes[index].lowThreshold = Number(e.target.value);
-                              setAlertSettings(prev => ({ ...prev, unitTypes: newUnitTypes }));
-                            }}
-                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="3"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {alertSettings.unitTypes.length === 0 && (
-                    <div className="p-4 rounded-2xl bg-slate-800/30 border border-slate-700/30 text-center">
-                      <p className="text-slate-400 text-sm">No unit types found for this warehouse</p>
-                      <p className="text-slate-500 text-xs mt-1">Add unit types to the warehouse first</p>
-                    </div>
-                  )}
+              {/* Global Alert Thresholds */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Empty Stock Threshold
+                  </label>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl">
+                    <span className="text-white text-sm">Always 0</span>
+                    <span className="text-xs text-slate-400">Stock of 0 is always considered empty</span>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Low Stock Threshold
+                  </label>
+                  <input
+                    type="number"
+                    value={alertSettings.lowThreshold}
+                    onChange={(e) => setAlertSettings((prev: { emptyThreshold: number; lowThreshold: number }) => ({ 
+                      ...prev, 
+                      lowThreshold: Number(e.target.value) 
+                    }))}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="3"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Alert when stock falls below this level (default: 3)</p>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3 justify-end">
+              <div className="flex gap-3 justify-end mt-6">
                 <button
                   onClick={() => setAlertSettingsOpen(false)}
                   className="px-4 py-2 rounded-xl bg-slate-700/50 border border-slate-600/50 text-slate-300 hover:bg-slate-700/70 transition-colors"

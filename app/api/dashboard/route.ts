@@ -1,7 +1,12 @@
 import { supabaseServer } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authServer";
 import dayjs from "dayjs";
+import weekday from "dayjs/plugin/weekday";
 import { NextRequest } from "next/server";
+
+// Configure dayjs to use Monday as start of week
+dayjs.extend(weekday);
+dayjs.Ls.en.weekStart = 1; // Monday
 
 interface Product {
   id: string;
@@ -38,10 +43,12 @@ export async function GET(req: NextRequest) {
     case "daily":
       startDate = today.startOf("day").toISOString();
       endDate = today.endOf("day").toISOString();
+      console.log(`[Dashboard] Daily range: ${startDate} to ${endDate}`);
       break;
     case "weekly":
       startDate = today.startOf("week").toISOString();
       endDate = today.endOf("week").toISOString();
+      console.log(`[Dashboard] Weekly range: ${startDate} to ${endDate}`);
       break;
     case "yearly":
       startDate = today.startOf("year").toISOString();
@@ -160,13 +167,12 @@ export async function GET(req: NextRequest) {
       alerts =
         stockRows?.map((r: StockRow) => {
           const current = Number(r.current_stock ?? 0);
-          const alert_type = current <= 0 ? "EMPTY" : current < 3 ? "LOW" : "OK";
           return {
             product_id: r.product_id,
             godown_id: r.godown_id,
             name: r.name,
             current_stock: current,
-            alert_type,
+            alert_type: "OK" as const, // Will be calculated on client side
           };
         }) ?? [];
 

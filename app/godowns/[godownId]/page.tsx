@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { use, useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import appToast from "@/lib/toast";
 import Link from "next/link";
 import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, BarChart3, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
@@ -109,7 +109,7 @@ export default function GodownDetailPage({
   useEffect(() => {
     if (!user) return;
     user.getIdToken().then(setIdToken).catch(() => {
-      toast.error("Failed to get auth token");
+      appToast.error(appToast.messages.auth.loginError);
     });
   }, [user]);
 
@@ -138,7 +138,7 @@ export default function GodownDetailPage({
       if (!res.ok) throw new Error(await res.text());
       setStockAnalytics(await res.json());
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load analytics");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
     } finally {
       setAnalyticsLoading(false);
     }
@@ -161,7 +161,7 @@ export default function GodownDetailPage({
       setCompanies(await compRes.json());
       setProducts(await prodRes.json());
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load godown data");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
     }
   };
 
@@ -190,9 +190,9 @@ export default function GodownDetailPage({
       setUnitName("");
       setUnitLoose(false);
       setUnitEditOpen(false);
-      toast.success("Unit updated");
+      appToast.success(appToast.messages.unit.updated);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update unit");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.unit.updateError);
     }
   };
 
@@ -207,9 +207,9 @@ export default function GodownDetailPage({
       });
       if (!res.ok && res.status !== 204) throw new Error(await res.text());
       setUnits((p) => p.filter((x) => x.id !== u.id));
-      toast.success("Unit deleted");
+      appToast.success(appToast.messages.unit.deleted);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete unit");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.unit.deleteError);
     }
   };
 
@@ -243,9 +243,9 @@ export default function GodownDetailPage({
       setUnitName("");
       setUnitLoose(false);
       setUnitOpen(false);
-      toast.success("Unit added");
+      appToast.success(appToast.messages.unit.created);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to add unit");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.unit.createError);
     }
   };
 
@@ -268,9 +268,9 @@ export default function GodownDetailPage({
       setCompanies((p) => [...p, created]);
       setCompanyName("");
       setCompanyOpen(false);
-      toast.success("Company added");
+      appToast.success(appToast.messages.data.saveSuccess);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to add company");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
     }
   };
 
@@ -288,9 +288,9 @@ export default function GodownDetailPage({
       setCompanyEditing(null);
       setCompanyName("");
       setCompanyEditOpen(false);
-      toast.success("Company updated");
+      appToast.success(appToast.messages.data.saveSuccess);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update company");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
     }
   };
 
@@ -305,9 +305,9 @@ export default function GodownDetailPage({
       });
       if (!res.ok && res.status !== 204) throw new Error(await res.text());
       setCompanies((p) => p.filter((x) => x.id !== c.id));
-      toast.success("Company deleted");
+      appToast.success(appToast.messages.data.deleteSuccess);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete company");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
     }
   };
 
@@ -347,9 +347,10 @@ export default function GodownDetailPage({
       setProductOpening("0");
       setProductOpen(false);
       await loadAll();
-      toast.success("Product created");
+      await loadCurrentStock();
+      appToast.success(appToast.messages.data.saveSuccess);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create product");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
     }
   };
 
@@ -380,9 +381,10 @@ export default function GodownDetailPage({
       setProductOpening("0");
       setProductEditOpen(false);
       await loadAll();
-      toast.success("Product updated");
+      await loadCurrentStock();
+      appToast.success(appToast.messages.product.updated);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update product");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.product.updateError);
     }
   };
 
@@ -397,9 +399,10 @@ export default function GodownDetailPage({
       });
       if (!res.ok && res.status !== 204) throw new Error(await res.text());
       setProducts((x) => x.filter((y) => y.id !== p.id));
-      toast.success("Product deleted");
+      await loadCurrentStock();
+      appToast.success(appToast.messages.product.deleted);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete product");
+      appToast.error(e instanceof Error ? e.message : appToast.messages.product.deleteError);
     }
   };
 
@@ -414,15 +417,41 @@ export default function GodownDetailPage({
   }, [products, productSearch, selectedCompany]);
 
   // Get current stock for products
-  const productStocks = useMemo(() => {
-    const stocks: Record<string, number> = {};
-    // For now, return opening stock as current stock
-    // In a real implementation, you'd fetch current stock from stock movements
-    products.forEach((product) => {
-      stocks[product.id] = product.opening_stock;
-    });
-    return stocks;
-  }, [products]);
+  const [productStocks, setProductStocks] = useState<Record<string, number>>({});
+  const [stockLoading, setStockLoading] = useState(false);
+
+  const loadCurrentStock = async () => {
+    if (!headers) return;
+    try {
+      setStockLoading(true);
+      const res = await fetch(`/api/reports/current-stock?godownId=${godownId}`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      
+      // Convert array to object with product ID as key
+      const stocks: Record<string, number> = {};
+      data.rows.forEach((row: { productName: string; currentStock: number }) => {
+        // Find product by name to get ID
+        const product = products.find(p => p.name === row.productName);
+        if (product) {
+          stocks[product.id] = row.currentStock;
+        }
+      });
+      
+      setProductStocks(stocks);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (headers && products.length > 0) {
+      loadCurrentStock();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers, godownId, products.length]);
 
   return (
     <AppShell>
@@ -809,7 +838,7 @@ export default function GodownDetailPage({
               <button
                 onClick={() => {
                   if (companies.length === 0 || units.length === 0) {
-                    toast.error("Add at least 1 company and 1 unit type first");
+                    appToast.error('Add at least 1 company and 1 unit type first');
                     setActiveTab(companies.length === 0 ? "companies" : "units");
                     return;
                   }
@@ -888,13 +917,19 @@ export default function GodownDetailPage({
                         <td className="px-3 py-2">{p.name}</td>
                         <td className="px-3 py-2">{p.sku ?? "-"}</td>
                         <td className="px-3 py-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            productStocks[p.id] > 0 
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                              : "bg-red-500/20 text-red-300 border border-red-500/30"
-                          }`}>
-                            {productStocks[p.id]?.toFixed(3) ?? "0.000"}
-                          </span>
+                          {stockLoading ? (
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                              Loading...
+                            </span>
+                          ) : (
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              (productStocks[p.id] ?? 0) > 0 
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : "bg-red-500/20 text-red-300 border border-red-500/30"
+                            }`}>
+                              {(productStocks[p.id] ?? 0)?.toFixed(3) ?? "0.000"}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
