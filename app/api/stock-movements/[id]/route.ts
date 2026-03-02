@@ -137,13 +137,12 @@ export async function DELETE(
     return new Response("Product not found", { status: 404 });
   }
 
-  // Calculate current stock balance up to movement date (excluding the movement being deleted)
+  // Calculate current total balance (all movements including the one being deleted)
   const { data: movements, error: movError } = await supabaseServer
     .from("stock_movements")
     .select("movement_date, type, quantity")
     .eq("product_id", existingMovement.product_id)
     .eq("user_id", user.uid)
-    .neq("id", id) // Exclude the movement being deleted
     .order("movement_date", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -151,19 +150,16 @@ export async function DELETE(
     return new Response(movError.message, { status: 500 });
   }
 
-  let balance = Number(product.opening_stock ?? 0);
-  const targetDate = new Date(existingMovement.movement_date);
-
+  // Calculate current total balance
+  let currentBalance = Number(product.opening_stock ?? 0);
   for (const m of movements ?? []) {
-    const d = new Date(m.movement_date);
-    if (d > targetDate) break;
-    balance += m.type === "IN" ? Number(m.quantity) : -Number(m.quantity);
+    currentBalance += m.type === "IN" ? Number(m.quantity) : -Number(m.quantity);
   }
 
   // Calculate what the balance would be after removing this movement
   const newBalance = existingMovement.type === "IN" 
-    ? balance - Number(existingMovement.quantity)
-    : balance + Number(existingMovement.quantity);
+    ? currentBalance - Number(existingMovement.quantity)
+    : currentBalance + Number(existingMovement.quantity);
 
   if (newBalance < 0) {
     return new Response("Deletion would result in negative stock", {
