@@ -372,7 +372,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Add fadeInUp animation */}
-        <style jsx>{`
+        <style jsx global>{`
           @keyframes fadeInUp {
             from {
               opacity: 0;
@@ -382,6 +382,56 @@ export default function DashboardPage() {
               opacity: 1;
               transform: translateY(0);
             }
+          }
+          
+          /* Thin invisible scrollbar */
+          .scrollbar-thin::-webkit-scrollbar {
+            width: 4px;
+          }
+          
+          .scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          
+          .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 2px;
+          }
+          
+          .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.5);
+          }
+          
+          .scrollbar-thin::-webkit-scrollbar-thumb:active {
+            background: rgba(148, 163, 184, 0.7);
+          }
+          
+          /* Completely override Recharts tooltip */
+          .recharts-tooltip-wrapper {
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            outline: none !important;
+          }
+          
+          .recharts-tooltip-content {
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
+          
+          .recharts-default-tooltip {
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
           }
         `}</style>
 
@@ -436,17 +486,56 @@ export default function DashboardPage() {
                     axisLine={false}
                   />
                   <Tooltip 
-                    contentStyle={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                      border: '1px solid rgba(148, 163, 184, 0.2)',
-                      borderRadius: '16px',
-                      fontSize: '12px',
-                      color: '#f1f5f9',
-                      boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-                      backdropFilter: 'blur(12px)',
-                      padding: '16px'
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div style={{
+                            backgroundColor: 'rgba(15, 23, 42, 0.98)',
+                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            fontSize: '11px',
+                            color: '#f1f5f9',
+                            fontWeight: '500',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                            backdropFilter: 'blur(8px)',
+                            minWidth: '120px'
+                          }}>
+                            {payload.map((entry, index) => (
+                              <div key={index} style={{ 
+                                color: entry.color, 
+                                marginBottom: index < payload.length - 1 ? '4px' : '0',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}>
+                                <span>{entry.name}:</span>
+                                <span style={{ marginLeft: '8px', fontWeight: '600' }}>
+                                  {entry.value}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return null;
                     }}
-                    labelStyle={{ color: '#94a3b8', marginBottom: '6px', fontWeight: 'bold' }}
+                    wrapperStyle={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      padding: '0',
+                      margin: '0',
+                      boxShadow: 'none'
+                    }}
+                    contentStyle={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      padding: '0',
+                      margin: '0',
+                      boxShadow: 'none'
+                    }}
+                    isAnimationActive={false}
+                    cursor={{ fill: 'rgba(148, 163, 184, 0.1)' }}
                   />
                   <Legend 
                     wrapperStyle={{
@@ -464,6 +553,9 @@ export default function DashboardPage() {
                     animationBegin={0}
                     animationDuration={800}
                     animationEasing="ease-out"
+                    onMouseEnter={(data) => {
+                      // Custom hover handling without tooltip
+                    }}
                   />
                   <Bar
                     dataKey="out"
@@ -473,6 +565,9 @@ export default function DashboardPage() {
                     animationBegin={200}
                     animationDuration={800}
                     animationEasing="ease-out"
+                    onMouseEnter={(data) => {
+                      // Custom hover handling without tooltip
+                    }}
                   />
                   <defs>
                     <linearGradient id="emeraldGradient" x1="0" y1="0" x2="0" y2="1">
@@ -520,7 +615,7 @@ export default function DashboardPage() {
               </div>
             </div>
             
-            <div className="space-y-4 max-h-64 overflow-y-auto custom-scrollbar">
+            <div className="space-y-4 max-h-64 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700/30 hover:scrollbar-thumb-slate-600/50">
               {/* Filter alerts based on view */}
               {alertView === 'all' || alertView === 'empty' ? (
                 calculatedAlerts.filter((a: { alert_type: "EMPTY" | "LOW" | "OK" }) => a.alert_type === 'EMPTY').length > 0 && (

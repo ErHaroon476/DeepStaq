@@ -455,76 +455,144 @@ export default function GodownDetailPage({
 
   return (
     <AppShell>
-      <div>
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <Link href="/godowns" className="text-xs text-subtle hover:underline">
-              ← Back to Godowns
-            </Link>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-              Godown workspace
-            </h1>
-            <p className="text-xs text-subtle">
-              Add units, companies and products — then open a product to record
-              daily stock IN/OUT.
-            </p>
+      <div className="space-y-6 sm:space-y-8">
+        <header className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-xl border border-slate-700/50">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-8 bg-gradient-to-b from-blue-500 to-cyan-400 rounded-full"></div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">Godown workspace</h1>
+              </div>
+              <p className="text-slate-300 text-sm sm:text-base max-w-2xl">
+                Manage units, companies and products — then track daily stock movements with advanced analytics.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link 
+                href="/godowns" 
+                className="px-4 py-2 rounded-xl bg-slate-700/50 border border-slate-600/50 text-slate-300 hover:bg-slate-700/70 transition-all duration-300 flex items-center gap-2"
+              >
+                <span className="text-lg">←</span>
+                Back to Godowns
+              </Link>
+            </div>
+          </div>
+        </header>
+
+        {/* Modern Tab Navigation */}
+        <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 rounded-2xl border border-slate-700/50 p-1 backdrop-blur-xl shadow-xl">
+          <div className="flex gap-1 p-1">
+            {(["overview", "units", "companies", "products"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setActiveTab(t)}
+                className={`flex-1 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-300 ${
+                  activeTab === t
+                    ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/25"
+                    : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                }`}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 text-xs mb-6">
-          {(["overview", "units", "companies", "products"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setActiveTab(t)}
-              className={`rounded-full px-3 py-1 border ${
-                activeTab === t
-                  ? "border-indigo-500 bg-indigo-500/10 text-indigo-600"
-                  : "app-border text-subtle hover:bg-slate-200/60"
-              }`}
-            >
-              {t.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
         {activeTab === "overview" && (
-          <div className="space-y-6">
-            {/* Enhanced KPIs */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="group rounded-2xl border app-border app-surface p-4 hover:shadow-lg transition-all duration-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-subtle">Units</p>
-                    <p className="mt-1 text-2xl font-bold">{units.length}</p>
+          <div className="space-y-6 sm:space-y-8">
+            {/* Modern KPI Cards */}
+            <section className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  label: "Total Units",
+                  value: units.length,
+                  accent: "from-indigo-500/20 via-indigo-500/0 to-transparent",
+                  icon: <Package className="h-5 w-5 sm:h-6 sm:w-6" />,
+                  iconBg: "from-indigo-500 to-purple-600",
+                  iconColor: "text-white",
+                  glow: "shadow-indigo-500/25"
+                },
+                {
+                  label: "Total Companies", 
+                  value: companies.length,
+                  accent: "from-orange-500/20 via-orange-500/0 to-transparent",
+                  icon: <Building2 className="h-5 w-5 sm:h-6 sm:w-6" />,
+                  iconBg: "from-orange-500 to-amber-600",
+                  iconColor: "text-white",
+                  glow: "shadow-orange-500/25"
+                },
+                {
+                  label: "Total Products",
+                  value: products.length,
+                  accent: "from-cyan-500/20 via-cyan-500/0 to-transparent",
+                  icon: <Boxes className="h-5 w-5 sm:h-6 sm:w-6" />,
+                  iconBg: "from-cyan-500 to-blue-600",
+                  iconColor: "text-white",
+                  glow: "shadow-cyan-500/25"
+                }
+              ].map((kpi, index) => (
+                <div
+                  key={kpi.label}
+                  className="group relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900/90 to-slate-800/90 p-4 sm:p-6 transition-all duration-500 hover:shadow-2xl hover:scale-[1.02] hover:-translate-y-1 backdrop-blur-xl"
+                  style={{
+                    animationDelay: `${index * 100}ms`,
+                    animation: 'fadeInUp 0.6s ease-out forwards'
+                  }}
+                >
+                  {/* Animated gradient background */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${kpi.accent} opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
+                  
+                  {/* Animated pattern overlay */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-700">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse"></div>
                   </div>
-                  <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-500/20 group-hover:scale-110 transition-transform">
-                    <Boxes className="h-5 w-5 text-blue-500" />
+                  
+                  {/* Floating particles effect */}
+                  <div className="absolute inset-0 overflow-hidden opacity-0 group-hover:opacity-30 transition-opacity duration-1000">
+                    <div className="absolute top-1/4 left-1/4 w-1 h-1 bg-white rounded-full animate-ping"></div>
+                    <div className="absolute top-3/4 right-1/4 w-1 h-1 bg-white rounded-full animate-ping" style={{animationDelay: '0.5s'}}></div>
+                    <div className="absolute bottom-1/4 left-1/2 w-1 h-1 bg-white rounded-full animate-ping" style={{animationDelay: '1s'}}></div>
                   </div>
+                  
+                  <div className="relative flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+                        <div className={`relative p-2 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-br ${kpi.iconBg} shadow-lg ${kpi.glow} group-hover:shadow-xl transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                          <div className="absolute inset-0 bg-white/20 rounded-xl sm:rounded-2xl animate-pulse"></div>
+                          <div className={`relative ${kpi.iconColor} z-10`}>
+                            {kpi.icon}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-slate-300 font-medium tracking-wide text-xs sm:text-sm uppercase truncate">{kpi.label}</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                            <span className="text-[10px] sm:text-[11px] text-slate-500">Live Data</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="relative text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+                        {kpi.value.toLocaleString()}
+                      </p>
+                      
+                      {/* Trend indicator */}
+                      <div className="mt-3 sm:mt-4 flex items-center gap-2">
+                        <div className="h-px bg-gradient-to-r from-transparent via-slate-600 to-transparent flex-1"></div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-700/50 border border-slate-600/50">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                          <span className="text-[10px] text-slate-400 font-medium">ACTIVE</span>
+                        </div>
+                        <div className="h-px bg-gradient-to-r from-slate-600 to-transparent flex-1"></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Decorative corner elements */}
+                  <div className="absolute top-3 right-3 w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="absolute bottom-3 left-3 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tl from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{animationDelay: '0.2s'}}></div>
                 </div>
-              </div>
-              <div className="group rounded-2xl border app-border app-surface p-4 hover:shadow-lg transition-all duration-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-subtle">Companies</p>
-                    <p className="mt-1 text-2xl font-bold">{companies.length}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 group-hover:scale-110 transition-transform">
-                    <Building2 className="h-5 w-5 text-green-500" />
-                  </div>
-                </div>
-              </div>
-              <div className="group rounded-2xl border app-border app-surface p-4 hover:shadow-lg transition-all duration-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-subtle">Products</p>
-                    <p className="mt-1 text-2xl font-bold">{products.length}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 group-hover:scale-110 transition-transform">
-                    <Package className="h-5 w-5 text-purple-500" />
-                  </div>
-                </div>
-              </div>
-            </div>
+              ))}
+            </section>
 
             {/* Stock Analytics */}
             <div className="grid gap-6 lg:grid-cols-2">
@@ -1352,6 +1420,18 @@ export default function GodownDetailPage({
           </div>
         </div>
       )}
+      <style jsx global>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </AppShell>
   );
 }
