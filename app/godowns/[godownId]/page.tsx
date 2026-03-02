@@ -4,7 +4,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { use, useEffect, useMemo, useState } from "react";
 import appToast from "@/lib/toast";
 import Link from "next/link";
-import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, BarChart3, Search } from "lucide-react";
+import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, TrendingDown, BarChart3, Search, Calendar } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import {
   Bar,
@@ -597,142 +597,282 @@ export default function GodownDetailPage({
             {/* Stock Analytics */}
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Stock KPIs */}
-              <div className="rounded-2xl border app-border app-surface p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500/20 to-red-500/20">
-                      <BarChart3 className="h-5 w-5 text-orange-500" />
+              <section className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 rounded-2xl sm:rounded-3xl border border-slate-700/50 p-6 sm:p-8 backdrop-blur-xl shadow-xl">
+                <div className="mb-6 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="relative p-3 rounded-2xl bg-gradient-to-br from-orange-500/20 to-red-500/20 shadow-lg shadow-orange-500/25">
+                      <div className="absolute inset-0 bg-white/20 rounded-2xl animate-pulse"></div>
+                      <BarChart3 className="h-6 w-6 text-orange-400 relative z-10" />
                     </div>
-                    <h2 className="text-sm font-semibold">Stock Analytics</h2>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Stock Analytics</h2>
+                      <p className="text-slate-400 text-sm">Real-time stock movement insights</p>
+                    </div>
                   </div>
                   {analyticsLoading && (
-                    <span className="text-[11px] text-subtle">Loading…</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                      <span className="text-[11px] text-slate-400">Loading…</span>
+                    </div>
                   )}
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-subtle">Total Opening Stock</div>
-                    <div className="text-xl font-bold text-blue-600">
-                      {stockAnalytics?.total_opening_stock?.toFixed(3) || "0.000"}
+                <div className="grid gap-4 sm:gap-6 grid-cols-2">
+                  {[
+                    {
+                      label: "Total Opening Stock",
+                      value: stockAnalytics?.total_opening_stock?.toFixed(3) || "0.000",
+                      accent: "from-blue-500/20 via-blue-500/0 to-transparent",
+                      icon: <Package className="h-5 w-5" />,
+                      iconBg: "from-blue-500 to-indigo-600",
+                      iconColor: "text-white",
+                      glow: "shadow-blue-500/25",
+                      description: "Starting inventory"
+                    },
+                    {
+                      label: "Current Stock",
+                      value: stockAnalytics?.total_current_stock?.toFixed(3) || "0.000",
+                      accent: "from-emerald-500/20 via-emerald-500/0 to-transparent",
+                      icon: <Boxes className="h-5 w-5" />,
+                      iconBg: "from-emerald-500 to-green-600",
+                      iconColor: "text-white",
+                      glow: "shadow-emerald-500/25",
+                      description: "Available inventory"
+                    },
+                    {
+                      label: "Total Stock IN",
+                      value: `+${stockAnalytics?.total_stock_in?.toFixed(3) || "0.000"}`,
+                      accent: "from-green-500/20 via-green-500/0 to-transparent",
+                      icon: <TrendingUp className="h-5 w-5" />,
+                      iconBg: "from-green-500 to-emerald-600",
+                      iconColor: "text-white",
+                      glow: "shadow-green-500/25",
+                      description: "Stock received"
+                    },
+                    {
+                      label: "Total Stock OUT",
+                      value: `-${stockAnalytics?.total_stock_out?.toFixed(3) || "0.000"}`,
+                      accent: "from-rose-500/20 via-rose-500/0 to-transparent",
+                      icon: <TrendingDown className="h-5 w-5" />,
+                      iconBg: "from-rose-500 to-red-600",
+                      iconColor: "text-white",
+                      glow: "shadow-rose-500/25",
+                      description: "Stock issued"
+                    }
+                  ].map((kpi, index) => (
+                    <div
+                      key={kpi.label}
+                      className="group relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/50 to-slate-900/50 p-4 transition-all duration-500 hover:shadow-lg hover:scale-[1.02] hover:-translate-y-1 backdrop-blur-sm"
+                      style={{
+                        animationDelay: `${index * 100}ms`,
+                        animation: 'fadeInUp 0.6s ease-out forwards'
+                      }}
+                    >
+                      {/* Animated gradient background */}
+                      <div className={`absolute inset-0 bg-gradient-to-br ${kpi.accent} opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
+                      
+                      {/* Animated pattern overlay */}
+                      <div className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-700">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse"></div>
+                      </div>
+                      
+                      <div className="relative flex flex-col">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`relative p-2 rounded-xl bg-gradient-to-br ${kpi.iconBg} shadow-lg ${kpi.glow} group-hover:shadow-xl transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                            <div className="absolute inset-0 bg-white/20 rounded-xl animate-pulse"></div>
+                            <div className={`relative ${kpi.iconColor} z-10`}>
+                              {kpi.icon}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-slate-300 font-medium tracking-wide text-xs uppercase truncate">{kpi.label}</p>
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse"></div>
+                              <span className="text-[10px] text-slate-500">{kpi.description}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="relative text-xl sm:text-2xl font-black tracking-tight text-white bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+                          {kpi.value}
+                        </p>
+                      </div>
+                      
+                      {/* Decorative corner elements */}
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-subtle">Current Stock</div>
-                    <div className="text-xl font-bold text-green-600">
-                      {stockAnalytics?.total_current_stock?.toFixed(3) || "0.000"}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-subtle">Total Stock IN</div>
-                    <div className="text-xl font-bold text-emerald-600">
-                      +{stockAnalytics?.total_stock_in?.toFixed(3) || "0.000"}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-subtle">Total Stock OUT</div>
-                    <div className="text-xl font-bold text-red-600">
-                      -{stockAnalytics?.total_stock_out?.toFixed(3) || "0.000"}
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 
                 {/* Show message when no data */}
                 {stockAnalytics && stockAnalytics.total_stock_in === 0 && stockAnalytics.total_stock_out === 0 && (
-                  <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 text-center">
-                    <p className="text-xs text-subtle">
+                  <div className="mt-6 p-4 rounded-2xl bg-gradient-to-br from-slate-800/50 to-slate-700/50 border border-slate-600/50 text-center backdrop-blur-sm">
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-slate-600/50 to-slate-500/50 flex items-center justify-center">
+                      <BarChart3 className="h-6 w-6 text-slate-400" />
+                    </div>
+                    <p className="text-sm text-slate-300">
                       {stockAnalytics.total_opening_stock === 0 
                         ? "No stock activity in this period" 
                         : "No stock movements in this period"}
                     </p>
                   </div>
                 )}
-              </div>
+              </section>
 
-              {/* Stock Movement Graph */}
-              <div className="rounded-2xl border app-border app-surface p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20">
-                      <TrendingUp className="h-5 w-5 text-cyan-500" />
+              {/* Stock Movement Graph - Modern Design */}
+              <section className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 rounded-2xl sm:rounded-3xl border border-slate-700/50 p-6 sm:p-8 backdrop-blur-xl shadow-xl">
+                <div className="mb-6 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="relative p-3 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 shadow-lg shadow-cyan-500/25">
+                      <div className="absolute inset-0 bg-white/20 rounded-2xl animate-pulse"></div>
+                      <TrendingUp className="h-6 w-6 text-cyan-400 relative z-10" />
                     </div>
-                    <h2 className="text-sm font-semibold">Stock Movement Trends</h2>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Stock Movement Trends</h2>
+                      <p className="text-slate-400 text-sm">Visualize stock flow patterns</p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <select
                       value={range}
                       onChange={(e) => setRange(e.target.value as "daily" | "weekly" | "monthly" | "yearly" | "custom")}
-                      className="text-xs rounded-md border app-border app-surface px-2 py-1"
+                      className="px-4 py-2 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 backdrop-blur-sm transition-all hover:bg-slate-800/70 text-sm"
                     >
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                      <option value="yearly">Yearly</option>
-                      <option value="custom">Custom</option>
+                      <option value="daily" className="bg-slate-800">Daily</option>
+                      <option value="weekly" className="bg-slate-800">Weekly</option>
+                      <option value="monthly" className="bg-slate-800">Monthly</option>
+                      <option value="yearly" className="bg-slate-800">Yearly</option>
+                      <option value="custom" className="bg-slate-800">Custom</option>
                     </select>
                   </div>
                 </div>
 
                 {range === "custom" && (
-                  <div className="mb-4 flex items-center gap-2 text-xs">
-                    <input
-                      type="date"
-                      value={from}
-                      onChange={(e) => setFrom(e.target.value)}
-                      className="rounded-md border app-border app-surface px-2 py-1 [&::-webkit-calendar-picker-indicator]:text-black [&::-webkit-calendar-picker-indicator]:dark:text-white dark:[&::-webkit-calendar-picker-indicator]:text-white"
-                      placeholder="From date"
-                    />
-                    <span>to</span>
-                    <input
-                      type="date"
-                      value={to}
-                      onChange={(e) => setTo(e.target.value)}
-                      className="rounded-md border app-border app-surface px-2 py-1 [&::-webkit-calendar-picker-indicator]:text-black [&::-webkit-calendar-picker-indicator]:dark:text-white dark:[&::-webkit-calendar-picker-indicator]:text-white"
-                      placeholder="To date"
-                    />
+                  <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-slate-800/50 to-slate-700/50 border border-slate-600/50 backdrop-blur-sm">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-4 w-4 text-slate-400" />
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          type="date"
+                          value={from}
+                          onChange={(e) => setFrom(e.target.value)}
+                          className="px-3 py-2 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 backdrop-blur-sm transition-all hover:bg-slate-700/70 text-sm [&::-webkit-calendar-picker-indicator]:text-white"
+                          placeholder="From date"
+                        />
+                        <span className="text-slate-400 text-sm">to</span>
+                        <input
+                          type="date"
+                          value={to}
+                          onChange={(e) => setTo(e.target.value)}
+                          className="px-3 py-2 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 backdrop-blur-sm transition-all hover:bg-slate-700/70 text-sm [&::-webkit-calendar-picker-indicator]:text-white"
+                          placeholder="To date"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <div className="h-64 bg-transparent">
+                <div className="h-80 bg-gradient-to-br from-slate-800/30 to-slate-900/30 rounded-2xl p-4 backdrop-blur-sm">
                   {stockAnalytics?.series && stockAnalytics.series.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart 
                         data={stockAnalytics.series}
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                        <defs>
+                          <linearGradient id="stockInGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0.3}/>
+                          </linearGradient>
+                          <linearGradient id="stockOutGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0.3}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid 
+                          strokeDasharray="3 3" 
+                          stroke="rgba(148, 163, 184, 0.1)"
+                          strokeOpacity={0.5}
+                        />
                         <XAxis 
                           dataKey="date" 
-                          tick={{ fontSize: 10 }}
+                          tick={{ fontSize: 11, fill: '#94a3b8' }}
                           tickLine={false}
-                          axisLine={{ className: "opacity-30" }}
+                          axisLine={{ stroke: 'rgba(148, 163, 184, 0.2)' }}
                         />
                         <YAxis 
-                          tick={{ fontSize: 10 }}
+                          tick={{ fontSize: 11, fill: '#94a3b8' }}
                           tickLine={false}
-                          axisLine={{ className: "opacity-30" }}
+                          axisLine={{ stroke: 'rgba(148, 163, 184, 0.2)' }}
                         />
                         <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: "var(--app-surface)",
-                            border: "1px solid var(--app-border)",
-                            borderRadius: "8px",
-                            fontSize: "11px"
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              return (
+                                <div style={{
+                                  backgroundColor: 'rgba(15, 23, 42, 0.98)',
+                                  border: '1px solid rgba(148, 163, 184, 0.3)',
+                                  borderRadius: '8px',
+                                  padding: '8px 12px',
+                                  fontSize: '11px',
+                                  color: '#f1f5f9',
+                                  fontWeight: '500',
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                                  backdropFilter: 'blur(8px)',
+                                  minWidth: '120px'
+                                }}>
+                                  {payload.map((entry, index) => (
+                                    <div key={index} style={{ 
+                                      color: entry.color, 
+                                      marginBottom: index < payload.length - 1 ? '4px' : '0',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center'
+                                    }}>
+                                      <span>{entry.name}:</span>
+                                      <span style={{ marginLeft: '8px', fontWeight: '600' }}>
+                                        {entry.value}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return null;
                           }}
+                          wrapperStyle={{
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            padding: '0',
+                            margin: '0',
+                            boxShadow: 'none'
+                          }}
+                          contentStyle={{
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            padding: '0',
+                            margin: '0',
+                            boxShadow: 'none'
+                          }}
+                          isAnimationActive={false}
+                          cursor={{ fill: 'rgba(148, 163, 184, 0.1)' }}
                         />
                         <Legend 
-                          wrapperStyle={{ fontSize: "11px" }}
+                          wrapperStyle={{ 
+                            fontSize: "11px",
+                            color: '#94a3b8'
+                          }}
+                          iconType="rect"
                         />
                         <Bar 
                           dataKey="stock_in" 
-                          fill="#10b981" 
+                          fill="url(#stockInGradient)" 
                           name="Stock IN"
                           radius={[4, 4, 0, 0]}
                           animationDuration={300}
                         />
                         <Bar 
                           dataKey="stock_out" 
-                          fill="#ef4444" 
+                          fill="url(#stockOutGradient)" 
                           name="Stock OUT"
                           radius={[4, 4, 0, 0]}
                           animationDuration={300}
@@ -742,17 +882,20 @@ export default function GodownDetailPage({
                   ) : (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
-                        <div className="text-4xl mb-2">📊</div>
-                        <p className="text-xs text-subtle">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-slate-700/50 to-slate-600/50 flex items-center justify-center">
+                          <TrendingUp className="h-8 w-8 text-slate-400" />
+                        </div>
+                        <p className="text-slate-300 text-sm">
                           {stockAnalytics?.total_stock_in === 0 && stockAnalytics?.total_stock_out === 0
                             ? "No stock movements in this period"
                             : "No data to display"}
                         </p>
+                        <p className="text-slate-500 text-xs mt-1">Try adjusting the date range</p>
                       </div>
                     </div>
                   )}
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         )}
