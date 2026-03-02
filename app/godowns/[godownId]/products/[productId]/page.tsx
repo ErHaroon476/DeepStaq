@@ -48,7 +48,11 @@ export default function ProductDetailPage({
   const [type, setType] = useState<"IN" | "OUT">("IN");
   const [date, setDate] = useState<string>(() => {
     const d = new Date();
-    return d.toISOString().slice(0, 10);
+    // Get local date in YYYY-MM-DD format without timezone conversion
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   });
   const [qty, setQty] = useState("1");
   const [note, setNote] = useState("");
@@ -469,7 +473,7 @@ export default function ProductDetailPage({
                             {movement.type === 'IN' ? '+' : '-'}{Number(movement.quantity).toFixed(3)}
                           </span>
                           <span className="text-slate-400 text-sm">
-                            {new Date(movement.movement_date).toLocaleDateString()}
+                            {new Date(movement.movement_date + 'T00:00:00').toLocaleDateString()}
                           </span>
                         </div>
                         {movement.note && (
