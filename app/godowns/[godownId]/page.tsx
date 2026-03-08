@@ -621,7 +621,7 @@ export default function GodownDetailPage({
                   {[
                     {
                       label: "Total Opening Stock",
-                      value: stockAnalytics?.total_opening_stock?.toFixed(3) || "0.000",
+                      value: stockAnalytics?.total_opening_stock?.toFixed(0) || "0",
                       accent: "from-blue-500/20 via-blue-500/0 to-transparent",
                       icon: <Package className="h-5 w-5" />,
                       iconBg: "from-blue-500 to-indigo-600",
@@ -631,7 +631,7 @@ export default function GodownDetailPage({
                     },
                     {
                       label: "Current Stock",
-                      value: stockAnalytics?.total_current_stock?.toFixed(3) || "0.000",
+                      value: stockAnalytics?.total_current_stock?.toFixed(0) || "0",
                       accent: "from-emerald-500/20 via-emerald-500/0 to-transparent",
                       icon: <Boxes className="h-5 w-5" />,
                       iconBg: "from-emerald-500 to-green-600",
@@ -641,7 +641,7 @@ export default function GodownDetailPage({
                     },
                     {
                       label: "Total Stock IN",
-                      value: `+${stockAnalytics?.total_stock_in?.toFixed(3) || "0.000"}`,
+                      value: `+${stockAnalytics?.total_stock_in?.toFixed(0) || "0"}`,
                       accent: "from-green-500/20 via-green-500/0 to-transparent",
                       icon: <TrendingUp className="h-5 w-5" />,
                       iconBg: "from-green-500 to-emerald-600",
@@ -651,7 +651,7 @@ export default function GodownDetailPage({
                     },
                     {
                       label: "Total Stock OUT",
-                      value: `-${stockAnalytics?.total_stock_out?.toFixed(3) || "0.000"}`,
+                      value: `-${stockAnalytics?.total_stock_out?.toFixed(0) || "0"}`,
                       accent: "from-rose-500/20 via-rose-500/0 to-transparent",
                       icon: <TrendingDown className="h-5 w-5" />,
                       iconBg: "from-rose-500 to-red-600",
@@ -1138,7 +1138,7 @@ export default function GodownDetailPage({
                                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                                 : "bg-red-500/20 text-red-300 border border-red-500/30"
                             }`}>
-                              {(productStocks[p.id] ?? 0)?.toFixed(3) ?? "0.000"}
+                              {(productStocks[p.id] ?? 0)?.toFixed(0) ?? "0"}
                             </span>
                           )}
                         </td>

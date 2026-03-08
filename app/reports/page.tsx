@@ -284,13 +284,13 @@ export default function ReportsPage() {
       let rowData;
       if (reportType === "current") {
         const currentRow = row as CurrentStockRow;
-        rowData = [currentRow.productName, currentRow.currentStock.toFixed(3)];
+        rowData = [currentRow.productName, Math.round(currentRow.currentStock).toFixed(0)];
       } else if (reportType === "closing") {
         const closingRow = row as ClosingStockRow;
-        rowData = [closingRow.productName, closingRow.openingStock.toFixed(3), closingRow.closingStock.toFixed(3)];
+        rowData = [closingRow.productName, Math.round(closingRow.openingStock).toFixed(0), Math.round(closingRow.closingStock).toFixed(0)];
       } else {
         const summaryRow = row as ReportRow;
-        rowData = [summaryRow.key, summaryRow.opening.toFixed(3), summaryRow.in.toFixed(3), summaryRow.out.toFixed(3), summaryRow.closing.toFixed(3)];
+        rowData = [summaryRow.key, Math.round(summaryRow.opening).toFixed(0), Math.round(summaryRow.in).toFixed(0), Math.round(summaryRow.out).toFixed(0), Math.round(summaryRow.closing).toFixed(0)];
       }
       
       // Subtle alternating row colors
@@ -334,13 +334,13 @@ export default function ReportsPage() {
       if (reportType === "current") {
         // Summary for current stock report
         const totalCurrentStock = currentStockRows.reduce((sum, row) => sum + row.currentStock, 0);
-        const summaryText = `Total Products: ${currentStockRows.length} | Total Current Stock: ${totalCurrentStock.toFixed(3)}`;
+        const summaryText = `Total Products: ${currentStockRows.length} | Total Current Stock: ${Math.round(totalCurrentStock).toFixed(0)}`;
         doc.text(summaryText, tableStartX, yPos);
       } else if (reportType === "closing") {
         // Summary for closing stock report
         const totalOpeningStock = closingStockRows.reduce((sum, row) => sum + row.openingStock, 0);
         const totalClosingStock = closingStockRows.reduce((sum, row) => sum + row.closingStock, 0);
-        const summaryText = `Total Products: ${closingStockRows.length} | Total Opening Stock: ${totalOpeningStock.toFixed(3)} | Total Closing Stock: ${totalClosingStock.toFixed(3)}`;
+        const summaryText = `Total Products: ${closingStockRows.length} | Total Opening Stock: ${Math.round(totalOpeningStock).toFixed(0)} | Total Closing Stock: ${Math.round(totalClosingStock).toFixed(0)}`;
         doc.text(summaryText, tableStartX, yPos);
       } else {
         // Summary for summary report
@@ -349,7 +349,7 @@ export default function ReportsPage() {
         const totalOpening = rows[0]?.opening || 0;
         const totalClosing = rows[rows.length - 1]?.closing || 0;
         
-        const summaryText = `Opening: ${totalOpening.toFixed(3)} | IN: ${totalIn.toFixed(3)} | OUT: ${totalOut.toFixed(3)} | Closing: ${totalClosing.toFixed(3)}`;
+        const summaryText = `Opening: ${Math.round(totalOpening).toFixed(0)} | IN: ${Math.round(totalIn).toFixed(0)} | OUT: ${Math.round(totalOut).toFixed(0)} | Closing: ${Math.round(totalClosing).toFixed(0)}`;
         doc.text(summaryText, tableStartX, yPos);
       }
     }
@@ -614,7 +614,7 @@ export default function ReportsPage() {
                           <td className="px-6 py-4 text-slate-200 font-medium">{row.productName}</td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-500/20 text-blue-300">
-                              {row.currentStock.toFixed(3)}
+                              {Math.round(row.currentStock).toFixed(0)}
                             </span>
                           </td>
                         </tr>
@@ -644,12 +644,12 @@ export default function ReportsPage() {
                           <td className="px-6 py-4 text-slate-200 font-medium">{row.productName}</td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-600/20 text-slate-300">
-                              {row.openingStock.toFixed(3)}
+                              {Math.round(row.openingStock).toFixed(0)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-500/20 text-blue-300">
-                              {row.closingStock.toFixed(3)}
+                              {Math.round(row.closingStock).toFixed(0)}
                             </span>
                           </td>
                         </tr>
@@ -679,22 +679,22 @@ export default function ReportsPage() {
                           <td className="px-6 py-4 text-slate-200 font-medium">{r.key}</td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-600/20 text-slate-300">
-                              {r.opening.toFixed(3)}
+                              {Math.round(r.opening).toFixed(0)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300">
-                              {r.in.toFixed(3)}
+                              {Math.round(r.in).toFixed(0)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-300">
-                              {r.out.toFixed(3)}
+                              {Math.round(r.out).toFixed(0)}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-500/20 text-blue-300">
-                              {r.closing.toFixed(3)}
+                              {Math.round(r.closing).toFixed(0)}
                             </span>
                           </td>
                         </tr>

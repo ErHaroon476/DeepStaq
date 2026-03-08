@@ -232,7 +232,7 @@ export default function ProductDetailPage({
           {[
             {
               label: "Today's Opening",
-              value: todayOpeningStock.toFixed(3),
+              value: todayOpeningStock.toFixed(0),
               accent: "from-blue-500/20 via-blue-500/0 to-transparent",
               icon: <Package className="h-5 w-5 sm:h-6 sm:w-6" />,
               iconBg: "from-blue-500 to-indigo-600",
@@ -242,7 +242,7 @@ export default function ProductDetailPage({
             },
             {
               label: "Today's IN",
-              value: `+${todayIn.toFixed(3)}`,
+              value: `+${todayIn.toFixed(0)}`,
               accent: "from-emerald-500/20 via-emerald-500/0 to-transparent",
               icon: <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />,
               iconBg: "from-emerald-500 to-green-600",
@@ -252,7 +252,7 @@ export default function ProductDetailPage({
             },
             {
               label: "Today's OUT",
-              value: `-${todayOut.toFixed(3)}`,
+              value: `-${todayOut.toFixed(0)}`,
               accent: "from-rose-500/20 via-rose-500/0 to-transparent",
               icon: <TrendingDown className="h-5 w-5 sm:h-6 sm:w-6" />,
               iconBg: "from-rose-500 to-red-600",
@@ -262,7 +262,7 @@ export default function ProductDetailPage({
             },
             {
               label: "Current Stock",
-              value: (todayOpeningStock + todayIn - todayOut).toFixed(3),
+              value: (todayOpeningStock + todayIn - todayOut).toFixed(0),
               accent: "from-purple-500/20 via-purple-500/0 to-transparent",
               icon: <Boxes className="h-5 w-5 sm:h-6 sm:w-6" />,
               iconBg: "from-purple-500 to-pink-600",
@@ -377,11 +377,12 @@ export default function ProductDetailPage({
                 type="number"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                inputMode="decimal"
-                step="0.001"
-                min="0.001"
+                inputMode="numeric"
+                step="1"
+                min="1"
+                pattern="[0-9]*"
                 className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 backdrop-blur-sm transition-all hover:bg-slate-800/70"
-                placeholder="0.000"
+                placeholder="0"
               />
             </div>
             
@@ -413,7 +414,7 @@ export default function ProductDetailPage({
             )}
             <button
               onClick={editingMovement ? () => updateMovement(editingMovement) : createMovement}
-              disabled={!qty.trim() || Number(qty) <= 0}
+              disabled={!qty.trim() || Number(qty) <= 0 || !Number.isInteger(Number(qty))}
               className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -470,7 +471,7 @@ export default function ProductDetailPage({
                           <span className={`font-semibold ${
                             movement.type === 'IN' ? 'text-emerald-400' : 'text-rose-400'
                           }`}>
-                            {movement.type === 'IN' ? '+' : '-'}{Number(movement.quantity).toFixed(3)}
+                            {movement.type === 'IN' ? '+' : '-'}{Math.round(Number(movement.quantity))}
                           </span>
                           <span className="text-slate-400 text-sm">
                             {new Date(movement.movement_date + 'T00:00:00').toLocaleDateString()}

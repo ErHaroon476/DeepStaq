@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
     .select("*")
     .eq("user_id", user.uid)
     .eq("product_id", productId)
-    .order("movement_date", { ascending: true })
-    .order("created_at", { ascending: true });
+    .order("movement_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
     return new Response(error.message, { status: 500 });

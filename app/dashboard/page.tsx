@@ -698,7 +698,7 @@ export default function DashboardPage() {
                                 <span className="text-white font-medium text-sm truncate">{a.name}</span>
                               </div>
                               <div className="text-orange-400 text-xs mt-1">
-                                Stock: <span className="font-bold">{Number(a.current_stock).toFixed(3)}</span>
+                                Stock: <span className="font-bold">{Math.round(Number(a.current_stock))}</span>
                               </div>
                             </div>
                             <div className="px-2 py-1 rounded-full bg-orange-500/20 border border-orange-500/30">
@@ -746,7 +746,7 @@ export default function DashboardPage() {
                                 <span className="text-white font-medium text-sm truncate">{a.name}</span>
                               </div>
                               <div className="text-emerald-400 text-xs mt-1">
-                                Stock: <span className="font-bold">{Number(a.current_stock).toFixed(3)}</span>
+                                Stock: <span className="font-bold">{Math.round(Number(a.current_stock))}</span>
                               </div>
                             </div>
                             <div className="px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30">
