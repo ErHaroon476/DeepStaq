@@ -47,11 +47,43 @@ create table if not exists public.stock_movements (
   type stock_movement_type not null,
   quantity numeric(18, 3) not null check (quantity > 0),
   note text,
+  stock_invoice_id uuid,
   created_at timestamptz not null default now(),
   created_by text not null,
   updated_at timestamptz,
   corrected_movement_id uuid references public.stock_movements(id)
 );
+
+create table if not exists public.stock_invoices (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  godown_id uuid not null references public.godowns(id) on delete cascade,
+  invoice_seq bigint not null,
+  invoice_no text not null,
+  invoice_date date not null,
+  type stock_movement_type not null,
+  note text,
+  created_at timestamptz not null default now(),
+  created_by text not null,
+  updated_at timestamptz,
+  updated_by text,
+  unique (user_id, godown_id, type, invoice_seq),
+  unique (user_id, invoice_no)
+);
+
+create table if not exists public.stock_invoice_lines (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  invoice_id uuid not null references public.stock_invoices(id) on delete cascade,
+  product_id uuid not null references public.products(id) on delete cascade,
+  quantity numeric(18, 3) not null check (quantity > 0),
+  note text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.stock_movements
+  add constraint stock_movements_stock_invoice_id_fkey
+  foreign key (stock_invoice_id) references public.stock_invoices(id) on delete set null;
 
 -- Current stock per product (opening + all movements up to today)
 create or replace view public.product_current_stock as
