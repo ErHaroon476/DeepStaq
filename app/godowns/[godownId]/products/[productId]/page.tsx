@@ -4,6 +4,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { use, useEffect, useMemo, useCallback, useState } from "react";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { Trash2, Package, TrendingUp, TrendingDown, Boxes, Plus, Edit2, Calendar } from "lucide-react";
 
@@ -38,6 +39,9 @@ export default function ProductDetailPage({
 }) {
   const { user } = useAuth();
   const { godownId, productId } = use(params);
+  const router = useRouter();
+
+  const disableLegacyProductMovements = true;
 
   const [idToken, setIdToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,10 +68,38 @@ export default function ProductDetailPage({
     });
   }, [user]);
 
+  useEffect(() => {
+    if (!disableLegacyProductMovements) return;
+    router.replace(`/godowns/${godownId}`);
+  }, [disableLegacyProductMovements, godownId, router]);
+
   const headers = useMemo(() => {
     if (!idToken) return undefined;
     return { Authorization: `Bearer ${idToken}` };
   }, [idToken]);
+
+  if (disableLegacyProductMovements) {
+    return (
+      <AppShell>
+        <div className="space-y-6 sm:space-y-8">
+          <div className="rounded-2xl border app-border app-surface p-6">
+            <div className="text-sm font-semibold">Stock movements moved</div>
+            <p className="mt-1 text-sm text-subtle">
+              This product screen no longer supports Stock IN/OUT. Use the Godown's Daily In/Out screen.
+            </p>
+            <div className="mt-4">
+              <Link
+                href={`/godowns/${godownId}`}
+                className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-600"
+              >
+                Go to Godown
+              </Link>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   const load = useCallback(async () => {
     if (!headers) return;

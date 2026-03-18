@@ -49,6 +49,40 @@ type StockAnalytics = {
   }>;
 };
 
+type StockInvoiceType = "IN" | "OUT";
+
+type StockInvoiceLineDraft = {
+  product_id: string;
+  product_query: string;
+  product_open: boolean;
+  quantity: string;
+  note: string;
+};
+
+type StockInvoiceListItem = {
+  id: string;
+  invoice_no: string;
+  invoice_seq: number;
+  invoice_date: string;
+  type: StockInvoiceType;
+  note: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+type StockInvoiceDetail = {
+  id: string;
+  godown_id: string;
+  invoice_no: string;
+  invoice_seq: number;
+  invoice_date: string;
+  type: StockInvoiceType;
+  note: string | null;
+  created_at: string;
+  updated_at: string | null;
+  lines: Array<{ id: string; product_id: string; quantity: number; note: string | null }>;
+};
+
 export default function GodownDetailPage({
   params,
 }: {
@@ -65,8 +99,26 @@ export default function GodownDetailPage({
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "units" | "companies" | "products"
+    "overview" | "daily" | "units" | "companies" | "products"
   >("overview");
+
+  const [invoiceType, setInvoiceType] = useState<StockInvoiceType>("IN");
+  const [invoiceDate, setInvoiceDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
+  const [invoiceNote, setInvoiceNote] = useState<string>("");
+  const [invoiceLines, setInvoiceLines] = useState<StockInvoiceLineDraft[]>([
+    { product_id: "", product_query: "", product_open: false, quantity: "1", note: "" },
+  ]);
+  const [invoices, setInvoices] = useState<StockInvoiceListItem[]>([]);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceFilterFrom, setInvoiceFilterFrom] = useState<string>("");
+  const [invoiceFilterTo, setInvoiceFilterTo] = useState<string>("");
+  const [invoiceEditingId, setInvoiceEditingId] = useState<string | null>(null);
 
   // Date range for analytics
   const [range, setRange] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
@@ -219,11 +271,157 @@ export default function GodownDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, godownId]);
 
+  const loadInvoices = async () => {
+    if (!headers) return;
+    try {
+      setInvoiceLoading(true);
+      const params = new URLSearchParams({ godownId });
+      if (invoiceFilterFrom) params.set("from", invoiceFilterFrom);
+      if (invoiceFilterTo) params.set("to", invoiceFilterTo);
+
+      const res = await fetch(`/api/stock-invoices?${params.toString()}`, {
+        headers,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setInvoices((await res.json()) as StockInvoiceListItem[]);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!headers) return;
     loadStockAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, godownId, range, from, to]);
+
+  useEffect(() => {
+    if (!headers) return;
+    if (activeTab !== "daily") return;
+    loadInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers, godownId, activeTab]);
+
+  const resetInvoiceForm = () => {
+    setInvoiceNote("");
+    setInvoiceLines([
+      { product_id: "", product_query: "", product_open: false, quantity: "1", note: "" },
+    ]);
+    setInvoiceType("IN");
+  };
+
+  const createInvoice = async () => {
+    if (!headers) return;
+    try {
+      const payload = {
+        godown_id: godownId,
+        invoice_date: invoiceDate,
+        type: invoiceType,
+        note: invoiceNote.trim() || null,
+        lines: invoiceLines
+          .map((l) => ({
+            product_id: l.product_id || undefined,
+            quantity: Number(l.quantity),
+            note: l.note.trim() || null,
+          }))
+          .filter((l) => l.product_id && l.quantity && l.quantity > 0),
+      };
+
+      const res = await fetch("/api/stock-invoices", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      resetInvoiceForm();
+      await loadInvoices();
+      await loadCurrentStock();
+      await loadStockAnalytics();
+      appToast.success(appToast.messages.data.saveSuccess);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
+    }
+  };
+
+  const deleteInvoice = async (id: string) => {
+    if (!headers) return;
+    try {
+      const res = await fetch(`/api/stock-invoices/${id}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok && res.status !== 204) throw new Error(await res.text());
+
+      if (invoiceEditingId === id) {
+        setInvoiceEditingId(null);
+        resetInvoiceForm();
+      }
+
+      await loadInvoices();
+      await loadCurrentStock();
+      await loadStockAnalytics();
+      appToast.success(appToast.messages.data.saveSuccess);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
+    }
+  };
+
+  const openEditInvoice = async (id: string) => {
+    if (!headers) return;
+    try {
+      const res = await fetch(`/api/stock-invoices/${id}`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const inv = (await res.json()) as StockInvoiceDetail;
+      setInvoiceEditingId(inv.id);
+      setInvoiceType(inv.type);
+      setInvoiceDate(inv.invoice_date);
+      setInvoiceNote(inv.note ?? "");
+      setInvoiceLines(
+        (inv.lines ?? []).map((l) => ({
+          product_id: l.product_id,
+          product_query: products.find((p) => p.id === l.product_id)?.name ?? "",
+          product_open: false,
+          quantity: String(l.quantity),
+          note: l.note ?? "",
+        })),
+      );
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
+    }
+  };
+
+  const updateInvoice = async () => {
+    if (!headers || !invoiceEditingId) return;
+    try {
+      const payload = {
+        lines: invoiceLines
+          .map((l) => ({
+            product_id: l.product_id || undefined,
+            quantity: Number(l.quantity),
+          }))
+          .filter((l) => l.product_id && l.quantity && l.quantity > 0),
+      };
+
+      const res = await fetch(`/api/stock-invoices/${invoiceEditingId}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      setInvoiceEditingId(null);
+      resetInvoiceForm();
+      await loadInvoices();
+      await loadCurrentStock();
+      await loadStockAnalytics();
+      appToast.success(appToast.messages.data.saveSuccess);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
+    }
+  };
 
   const createUnit = async () => {
     if (!headers || !unitName.trim()) return;
@@ -482,7 +680,7 @@ export default function GodownDetailPage({
         {/* Modern Tab Navigation */}
         <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 rounded-2xl border border-slate-700/50 p-1 backdrop-blur-xl shadow-xl">
           <div className="flex gap-1 p-1">
-            {(["overview", "units", "companies", "products"] as const).map((t) => (
+            {(["overview", "daily", "units", "companies", "products"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setActiveTab(t)}
@@ -492,7 +690,7 @@ export default function GodownDetailPage({
                     : "text-slate-400 hover:text-white hover:bg-slate-700/50"
                 }`}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "daily" ? "Daily In/Out" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
@@ -900,6 +1098,502 @@ export default function GodownDetailPage({
           </div>
         )}
 
+        {activeTab === "daily" && (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h2 className="text-sm font-semibold">Daily In/Out</h2>
+            </div>
+
+            <div className="rounded-2xl border app-border app-surface p-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div>
+                  <label className="block text-xs font-medium mb-1">Type</label>
+                  <select
+                    value={invoiceType}
+                    onChange={(e) => setInvoiceType(e.target.value as StockInvoiceType)}
+                    disabled={Boolean(invoiceEditingId)}
+                    className={`w-full px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      invoiceEditingId ? "opacity-70" : ""
+                    }`}
+                  >
+                    <option value="IN">Stock IN</option>
+                    <option value="OUT">Stock OUT</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    disabled={Boolean(invoiceEditingId)}
+                    className={`w-full px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      invoiceEditingId ? "opacity-70" : ""
+                    }`}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium mb-1">Note (optional)</label>
+                  <input
+                    value={invoiceNote}
+                    onChange={(e) => setInvoiceNote(e.target.value)}
+                    disabled={Boolean(invoiceEditingId)}
+                    className={`w-full px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      invoiceEditingId ? "opacity-70" : ""
+                    }`}
+                    placeholder="Invoice note"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border app-border overflow-visible">
+                {/* Mobile layout */}
+                <div className="sm:hidden p-3 space-y-3">
+                  {invoiceLines.map((l, idx) => (
+                    <div key={idx} className="rounded-2xl border app-border app-surface p-3 space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1 text-subtle">Product</label>
+                        <div className="relative">
+                          <input
+                            value={l.product_query}
+                            onChange={(e) => {
+                              if (invoiceEditingId) return;
+                              const q = e.target.value;
+                              setInvoiceLines((p) =>
+                                p.map((x, i) =>
+                                  i === idx
+                                    ? {
+                                        ...x,
+                                        product_query: q,
+                                        product_open: true,
+                                        product_id: q.trim() ? x.product_id : "",
+                                      }
+                                    : x,
+                                ),
+                              );
+                            }}
+                            onFocus={() => {
+                              if (invoiceEditingId) return;
+                              setInvoiceLines((p) =>
+                                p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)),
+                              );
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setInvoiceLines((p) =>
+                                  p.map((x, i) => (i === idx ? { ...x, product_open: false } : x)),
+                                );
+                              }, 150);
+                            }}
+                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Search product..."
+                            readOnly={Boolean(invoiceEditingId)}
+                          />
+                          {l.product_open && products.length > 0 && (
+                            <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-xl border app-border app-surface shadow-lg">
+                              {products
+                                .filter((p) => {
+                                  const stock = Number(productStocks[p.id] ?? 0);
+                                  return invoiceType === "OUT" ? stock > 0 : true;
+                                })
+                                .filter((p) =>
+                                  p.name
+                                    .toLowerCase()
+                                    .includes((l.product_query || "").toLowerCase()),
+                                )
+                                .slice(0, 30)
+                                .map((p) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => {
+                                      setInvoiceLines((prev) =>
+                                        prev.map((x, i) =>
+                                          i === idx
+                                            ? {
+                                                ...x,
+                                                product_id: p.id,
+                                                product_query: p.name,
+                                                product_open: false,
+                                              }
+                                            : x,
+                                        ),
+                                      );
+                                    }}
+                                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-200/60"
+                                  >
+                                    <span className="truncate">{p.name}</span>
+                                    <span
+                                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                                        Number(productStocks[p.id] ?? 0) > 0
+                                          ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300"
+                                          : "border-slate-500/30 bg-slate-500/20 text-slate-300"
+                                      }`}
+                                    >
+                                      {Number(productStocks[p.id] ?? 0).toFixed(0)}
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium mb-1 text-subtle">Qty</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={l.quantity}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setInvoiceLines((p) =>
+                                p.map((x, i) => (i === idx ? { ...x, quantity: v } : x)),
+                              );
+                            }}
+                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (invoiceEditingId) return;
+                              setInvoiceLines((p) => {
+                                if (p.length <= 1) return p;
+                                return p.filter((_, i) => i !== idx);
+                              });
+                            }}
+                            className="w-full inline-flex items-center justify-center gap-1 rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1 text-subtle">Line note</label>
+                        <input
+                          value={l.note}
+                          onChange={(e) => {
+                            if (invoiceEditingId) return;
+                            const v = e.target.value;
+                            setInvoiceLines((p) =>
+                              p.map((x, i) => (i === idx ? { ...x, note: v } : x)),
+                            );
+                          }}
+                          className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Optional"
+                          readOnly={Boolean(invoiceEditingId)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop table */}
+                <table className="hidden sm:table min-w-full text-xs">
+                  <thead className="border-b app-border">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Product</th>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Qty</th>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Line note</th>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceLines.map((l, idx) => (
+                      <tr key={idx} className="border-b app-border">
+                        <td className="px-3 py-2">
+                          <div className="relative">
+                            <input
+                              value={l.product_query}
+                              onChange={(e) => {
+                                if (invoiceEditingId) return;
+                                const q = e.target.value;
+                                setInvoiceLines((p) =>
+                                  p.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          product_query: q,
+                                          product_open: true,
+                                          product_id: q.trim() ? x.product_id : "",
+                                        }
+                                      : x,
+                                  ),
+                                );
+                              }}
+                              onFocus={() => {
+                                if (invoiceEditingId) return;
+                                setInvoiceLines((p) =>
+                                  p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)),
+                                );
+                              }}
+                              onBlur={() => {
+                                setTimeout(() => {
+                                  setInvoiceLines((p) =>
+                                    p.map((x, i) => (i === idx ? { ...x, product_open: false } : x)),
+                                  );
+                                }, 150);
+                              }}
+                              className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              placeholder="Search product..."
+                              readOnly={Boolean(invoiceEditingId)}
+                            />
+                            {l.product_open && products.length > 0 && (
+                              <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-xl border app-border app-surface shadow-lg">
+                                {products
+                                  .filter((p) => {
+                                    const stock = Number(productStocks[p.id] ?? 0);
+                                    return invoiceType === "OUT" ? stock > 0 : true;
+                                  })
+                                  .filter((p) =>
+                                    p.name
+                                      .toLowerCase()
+                                      .includes((l.product_query || "").toLowerCase()),
+                                  )
+                                  .slice(0, 30)
+                                  .map((p) => (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      onClick={() => {
+                                        setInvoiceLines((prev) =>
+                                          prev.map((x, i) =>
+                                            i === idx
+                                              ? {
+                                                  ...x,
+                                                  product_id: p.id,
+                                                  product_query: p.name,
+                                                  product_open: false,
+                                                }
+                                              : x,
+                                          ),
+                                        );
+                                      }}
+                                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-200/60"
+                                    >
+                                      <span className="truncate">{p.name}</span>
+                                      <span
+                                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                                          Number(productStocks[p.id] ?? 0) > 0
+                                            ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300"
+                                            : "border-slate-500/30 bg-slate-500/20 text-slate-300"
+                                        }`}
+                                      >
+                                        {Number(productStocks[p.id] ?? 0).toFixed(0)}
+                                      </span>
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={l.quantity}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setInvoiceLines((p) =>
+                                p.map((x, i) => (i === idx ? { ...x, quantity: v } : x)),
+                              );
+                            }}
+                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={l.note}
+                            onChange={(e) => {
+                              if (invoiceEditingId) return;
+                              const v = e.target.value;
+                              setInvoiceLines((p) =>
+                                p.map((x, i) => (i === idx ? { ...x, note: v } : x)),
+                              );
+                            }}
+                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Optional"
+                            readOnly={Boolean(invoiceEditingId)}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (invoiceEditingId) return;
+                              setInvoiceLines((p) => {
+                                if (p.length <= 1) return p;
+                                return p.filter((_, i) => i !== idx);
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    invoiceEditingId
+                      ? null
+                      :
+                    setInvoiceLines((p) => [
+                      ...p,
+                      {
+                        product_id: "",
+                        product_query: "",
+                        product_open: false,
+                        quantity: "1",
+                        note: "",
+                      },
+                    ])
+                  }
+                  className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
+                >
+                  Add line
+                </button>
+
+                <div className="flex justify-end gap-2">
+                  {invoiceEditingId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInvoiceEditingId(null);
+                        resetInvoiceForm();
+                      }}
+                      className="rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
+                    >
+                      Cancel edit
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={resetInvoiceForm}
+                    className="rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={invoiceEditingId ? updateInvoice : createInvoice}
+                    className="rounded-lg bg-indigo-500 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-600"
+                  >
+                    {invoiceEditingId ? "Update invoice" : "Save invoice"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border app-border app-surface p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1">From</label>
+                  <input
+                    type="date"
+                    value={invoiceFilterFrom}
+                    onChange={(e) => setInvoiceFilterFrom(e.target.value)}
+                    className="px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">To</label>
+                  <input
+                    type="date"
+                    value={invoiceFilterTo}
+                    onChange={(e) => setInvoiceFilterTo(e.target.value)}
+                    className="px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={loadInvoices}
+                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-600"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border app-border overflow-hidden">
+                <table className="min-w-full text-xs">
+                  <thead className="border-b app-border">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Invoice</th>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Date</th>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Note</th>
+                      <th className="px-3 py-2 text-left font-semibold text-subtle">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoiceLoading ? (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-6 text-center text-subtle">
+                          Loading...
+                        </td>
+                      </tr>
+                    ) : invoices.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-6 text-center text-subtle">
+                          No invoices.
+                        </td>
+                      </tr>
+                    ) : (
+                      invoices.map((inv) => (
+                        <tr key={inv.id} className="border-b app-border">
+                          <td className="px-3 py-2 font-medium">{inv.invoice_no}</td>
+                          <td className="px-3 py-2">
+                            {new Date(inv.invoice_date + "T00:00:00").toLocaleDateString()}
+                          </td>
+                          <td className="px-3 py-2">{inv.note ?? "-"}</td>
+                          <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openEditInvoice(inv.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // eslint-disable-next-line no-alert
+                                if (confirm("Delete this invoice? Stock will be reverted.")) {
+                                  deleteInvoice(inv.id);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
         {activeTab === "units" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -1144,12 +1838,6 @@ export default function GodownDetailPage({
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                            <Link
-                              href={`/godowns/${godownId}/products/${p.id}`}
-                              className="text-indigo-600 hover:underline sm:hidden"
-                            >
-                              Open
-                            </Link>
                             <button
                               type="button"
                               onClick={() => openEditProduct(p)}
@@ -1167,12 +1855,6 @@ export default function GodownDetailPage({
                               <Trash2 className="h-4 w-4" />
                             </button>
                             <div className="hidden sm:flex items-center gap-2">
-                              <Link
-                                href={`/godowns/${godownId}/products/${p.id}`}
-                                className="text-indigo-600 hover:underline"
-                              >
-                                Open
-                              </Link>
                               <button
                                 type="button"
                                 onClick={() => openEditProduct(p)}
