@@ -4,8 +4,9 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { use, useEffect, useMemo, useState } from "react";
 import appToast from "@/lib/toast";
 import Link from "next/link";
-import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, TrendingDown, BarChart3, Search, Calendar } from "lucide-react";
+import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, TrendingDown, BarChart3, Search, Calendar, Info, Eye, Download } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import jsPDF from "jspdf";
 import {
   Bar,
   BarChart,
@@ -83,6 +84,17 @@ type StockInvoiceDetail = {
   lines: Array<{ id: string; product_id: string; quantity: number; note: string | null }>;
 };
 
+type ProductHistoryItem = {
+  id: string;
+  movement_date: string;
+  type: StockInvoiceType;
+  quantity: number;
+  note: string | null;
+  created_at: string;
+  stock_invoice_id: string | null;
+  stock_invoices?: { invoice_no: string; invoice_date: string; type: StockInvoiceType } | null;
+};
+
 export default function GodownDetailPage({
   params,
 }: {
@@ -119,6 +131,18 @@ export default function GodownDetailPage({
   const [invoiceFilterFrom, setInvoiceFilterFrom] = useState<string>("");
   const [invoiceFilterTo, setInvoiceFilterTo] = useState<string>("");
   const [invoiceEditingId, setInvoiceEditingId] = useState<string | null>(null);
+
+  const [invoiceViewingId, setInvoiceViewingId] = useState<string | null>(null);
+  const [invoiceViewing, setInvoiceViewing] = useState<StockInvoiceDetail | null>(null);
+  const [invoiceViewingLoading, setInvoiceViewingLoading] = useState(false);
+
+  const [invoicePage, setInvoicePage] = useState(1);
+  const invoicePageSize = 10;
+
+  const [productHistoryOpen, setProductHistoryOpen] = useState(false);
+  const [productHistoryProduct, setProductHistoryProduct] = useState<Product | null>(null);
+  const [productHistoryLoading, setProductHistoryLoading] = useState(false);
+  const [productHistory, setProductHistory] = useState<ProductHistoryItem[]>([]);
 
   // Date range for analytics
   const [range, setRange] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
@@ -284,10 +308,102 @@ export default function GodownDetailPage({
       });
       if (!res.ok) throw new Error(await res.text());
       setInvoices((await res.json()) as StockInvoiceListItem[]);
+      setInvoicePage(1);
     } catch (e) {
       appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
     } finally {
       setInvoiceLoading(false);
+    }
+  };
+
+  const openViewInvoice = async (id: string) => {
+    if (!headers) return;
+    try {
+      setInvoiceViewingId(id);
+      setInvoiceViewing(null);
+      setInvoiceViewingLoading(true);
+      const res = await fetch(`/api/stock-invoices/${id}`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      setInvoiceViewing((await res.json()) as StockInvoiceDetail);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
+      setInvoiceViewingId(null);
+      setInvoiceViewing(null);
+    } finally {
+      setInvoiceViewingLoading(false);
+    }
+  };
+
+  const exportInvoicePDF = async (id: string) => {
+    if (!headers) return;
+    try {
+      const res = await fetch(`/api/stock-invoices/${id}`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const inv = (await res.json()) as StockInvoiceDetail;
+
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let y = 14;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("Invoice", pageWidth / 2, y, { align: "center" });
+      y += 8;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Invoice No: ${inv.invoice_no}`, 14, y);
+      y += 6;
+      doc.text(`Type: ${inv.type}`, 14, y);
+      y += 6;
+      doc.text(`Date: ${new Date(inv.invoice_date + "T00:00:00").toLocaleDateString()}`, 14, y);
+      y += 6;
+      doc.text(`Note: ${inv.note ?? "-"}`, 14, y);
+      y += 10;
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Product", 14, y);
+      doc.text("Qty", pageWidth - 14, y, { align: "right" });
+      y += 4;
+      doc.setDrawColor(200);
+      doc.line(14, y, pageWidth - 14, y);
+      y += 6;
+      doc.setFont("helvetica", "normal");
+
+      for (const line of inv.lines ?? []) {
+        if (y > 280) {
+          doc.addPage();
+          y = 14;
+        }
+        const productName = products.find((p) => p.id === line.product_id)?.name ?? line.product_id;
+        doc.text(String(productName), 14, y, { maxWidth: pageWidth - 40 });
+        doc.text(String(Number(line.quantity).toFixed(0)), pageWidth - 14, y, { align: "right" });
+        y += 6;
+      }
+
+      doc.save(`${inv.invoice_no}.pdf`);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
+    }
+  };
+
+  const openProductHistory = async (p: Product) => {
+    if (!headers) return;
+    try {
+      setProductHistoryOpen(true);
+      setProductHistoryProduct(p);
+      setProductHistoryLoading(true);
+      setProductHistory([]);
+      const res = await fetch(`/api/products/${p.id}/history`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      setProductHistory((await res.json()) as ProductHistoryItem[]);
+    } catch (e) {
+      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
+      setProductHistoryOpen(false);
+      setProductHistoryProduct(null);
+      setProductHistory([]);
+    } finally {
+      setProductHistoryLoading(false);
     }
   };
 
@@ -1553,7 +1669,9 @@ export default function GodownDetailPage({
                         </td>
                       </tr>
                     ) : (
-                      invoices.map((inv) => (
+                      invoices
+                        .slice((invoicePage - 1) * invoicePageSize, invoicePage * invoicePageSize)
+                        .map((inv) => (
                         <tr key={inv.id} className="border-b app-border">
                           <td className="px-3 py-2 font-medium">{inv.invoice_no}</td>
                           <td className="px-3 py-2">
@@ -1562,6 +1680,20 @@ export default function GodownDetailPage({
                           <td className="px-3 py-2">{inv.note ?? "-"}</td>
                           <td className="px-3 py-2">
                           <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openViewInvoice(inv.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+                            >
+                              <Eye className="h-3 w-3" /> View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => exportInvoicePDF(inv.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+                            >
+                              <Download className="h-3 w-3" /> PDF
+                            </button>
                             <button
                               type="button"
                               onClick={() => openEditInvoice(inv.id)}
@@ -1589,6 +1721,36 @@ export default function GodownDetailPage({
                   </tbody>
                 </table>
               </div>
+
+              {!invoiceLoading && invoices.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
+                  <div className="text-xs text-subtle">
+                    Page {invoicePage} of {Math.max(1, Math.ceil(invoices.length / invoicePageSize))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
+                      disabled={invoicePage <= 1}
+                      className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60 disabled:opacity-60"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setInvoicePage((p) =>
+                          Math.min(Math.max(1, Math.ceil(invoices.length / invoicePageSize)), p + 1),
+                        )
+                      }
+                      disabled={invoicePage >= Math.ceil(invoices.length / invoicePageSize)}
+                      className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60 disabled:opacity-60"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
@@ -1840,6 +2002,14 @@ export default function GodownDetailPage({
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                             <button
                               type="button"
+                              onClick={() => openProductHistory(p)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60 sm:hidden"
+                              aria-label="Product history"
+                            >
+                              <Info className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => openEditProduct(p)}
                               className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60 sm:hidden"
                               aria-label="Edit product"
@@ -1855,6 +2025,14 @@ export default function GodownDetailPage({
                               <Trash2 className="h-4 w-4" />
                             </button>
                             <div className="hidden sm:flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openProductHistory(p)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border app-border app-surface hover:bg-slate-200/60"
+                                aria-label="Product history"
+                              >
+                                <Info className="h-4 w-4" />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => openEditProduct(p)}
@@ -1883,6 +2061,132 @@ export default function GodownDetailPage({
           </div>
         )}
       </div>
+
+      {productHistoryOpen && productHistoryProduct && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-2xl rounded-2xl border app-border app-surface p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold truncate">History: {productHistoryProduct.name}</h3>
+                <p className="text-xs text-subtle mt-1">IN/OUT movements with source invoice (if available)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setProductHistoryOpen(false);
+                  setProductHistoryProduct(null);
+                  setProductHistory([]);
+                }}
+                className="rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border app-border overflow-hidden">
+              <table className="min-w-full text-xs">
+                <thead className="border-b app-border">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-subtle">Date</th>
+                    <th className="px-3 py-2 text-left font-semibold text-subtle">Type</th>
+                    <th className="px-3 py-2 text-left font-semibold text-subtle">Qty</th>
+                    <th className="px-3 py-2 text-left font-semibold text-subtle">Invoice</th>
+                    <th className="px-3 py-2 text-left font-semibold text-subtle">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productHistoryLoading ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-subtle">Loading...</td>
+                    </tr>
+                  ) : productHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-subtle">No movements found.</td>
+                    </tr>
+                  ) : (
+                    productHistory.map((m) => (
+                      <tr key={m.id} className="border-b app-border">
+                        <td className="px-3 py-2">{new Date(m.movement_date + "T00:00:00").toLocaleDateString()}</td>
+                        <td className="px-3 py-2">{m.type}</td>
+                        <td className="px-3 py-2">{Number(m.quantity ?? 0).toFixed(0)}</td>
+                        <td className="px-3 py-2">{m.stock_invoices?.invoice_no ?? "-"}</td>
+                        <td className="px-3 py-2">{m.note ?? "-"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {invoiceViewingId && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-2xl rounded-2xl border app-border app-surface p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold truncate">Invoice details</h3>
+                <p className="text-xs text-subtle mt-1">View and export PDF</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setInvoiceViewingId(null);
+                  setInvoiceViewing(null);
+                }}
+                className="rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+              >
+                Close
+              </button>
+            </div>
+
+            {invoiceViewingLoading || !invoiceViewing ? (
+              <div className="mt-6 text-xs text-subtle">Loading...</div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="text-xs">
+                    <div className="font-semibold">{invoiceViewing.invoice_no}</div>
+                    <div className="text-subtle">
+                      {invoiceViewing.type} · {new Date(invoiceViewing.invoice_date + "T00:00:00").toLocaleDateString()}
+                    </div>
+                    <div className="text-subtle">{invoiceViewing.note ?? "-"}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => exportInvoicePDF(invoiceViewing.id)}
+                    className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
+                  >
+                    <Download className="h-3 w-3" /> Export PDF
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border app-border overflow-hidden">
+                  <table className="min-w-full text-xs">
+                    <thead className="border-b app-border">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-subtle">Product</th>
+                        <th className="px-3 py-2 text-left font-semibold text-subtle">Qty</th>
+                        <th className="px-3 py-2 text-left font-semibold text-subtle">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(invoiceViewing.lines ?? []).map((l) => (
+                        <tr key={l.id} className="border-b app-border">
+                          <td className="px-3 py-2">{products.find((p) => p.id === l.product_id)?.name ?? l.product_id}</td>
+                          <td className="px-3 py-2">{Number(l.quantity ?? 0).toFixed(0)}</td>
+                          <td className="px-3 py-2">{l.note ?? "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Unit modal */}
       {unitOpen && (
