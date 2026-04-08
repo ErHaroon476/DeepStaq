@@ -5,7 +5,10 @@ import { requireUser } from "@/lib/authServer";
 type InvoiceType = "IN" | "OUT";
 
 type UpdateInvoiceBody = {
-  lines?: Array<{ product_id?: string; quantity?: number }>;
+  invoice_date?: string;
+  type?: InvoiceType;
+  note?: string | null;
+  lines?: Array<{ product_id?: string; quantity?: number; note?: string | null }>;
 };
 
 export async function GET(
@@ -59,14 +62,15 @@ export async function PATCH(
     return new Response("Invoice not found", { status: 404 });
   }
 
-  const invoice_date = existing.invoice_date;
-  const type = existing.type as InvoiceType;
+  const invoice_date = body.invoice_date ?? existing.invoice_date;
+  const type = (body.type ?? existing.type) as InvoiceType;
   const rawLines = body.lines ?? [];
 
   const normalizedLines = rawLines
     .map((l) => ({
       product_id: l.product_id,
       quantity: typeof l.quantity === "number" ? l.quantity : Number(l.quantity),
+      note: l.note ?? null,
     }))
     .filter((l) => l.product_id && l.quantity && l.quantity > 0);
 
@@ -76,7 +80,7 @@ export async function PATCH(
 
   const { data: existingLines, error: existingLinesError } = await supabaseServer
     .from("stock_invoice_lines")
-    .select("product_id, quantity, note")
+    .select("product_id, quantity")
     .eq("user_id", user.uid)
     .eq("invoice_id", id);
 
@@ -84,47 +88,42 @@ export async function PATCH(
     return new Response(existingLinesError.message, { status: 500 });
   }
 
-  const existingProductIds = new Set((existingLines ?? []).map((l) => l.product_id));
-  const newProductIds = new Set(normalizedLines.map((l) => l.product_id));
+  const productIds = Array.from(
+    new Set([
+      ...normalizedLines.map((l) => l.product_id!),
+      ...(existingLines ?? []).map((l) => l.product_id),
+    ]),
+  );
 
-  if (existingProductIds.size !== newProductIds.size) {
-    return new Response("Editing invoice lines is not allowed", { status: 400 });
-  }
-
-  for (const pid of existingProductIds) {
-    if (!newProductIds.has(pid)) {
-      return new Response("Editing invoice lines is not allowed", { status: 400 });
-    }
-  }
-
-  // Validate stock for OUT after reversing this invoice (exclude this invoice's existing movements).
-  if (type === "OUT") {
+  // Validate stock only as-of the invoice date after reversing this invoice.
+  // This matches "reverse invoice first then apply" behavior.
+  if (type === "OUT" && productIds.length > 0) {
     const byProduct = new Map<string, number>();
     for (const l of normalizedLines) {
       byProduct.set(l.product_id!, (byProduct.get(l.product_id!) ?? 0) + Number(l.quantity));
     }
 
-    const productIds = Array.from(byProduct.keys());
+    const outProductIds = Array.from(byProduct.keys());
 
     const { data: products, error: prodError } = await supabaseServer
       .from("products")
-      .select("id, user_id, opening_stock")
+      .select("id, opening_stock")
       .eq("user_id", user.uid)
-      .in("id", productIds);
+      .in("id", outProductIds);
 
     if (prodError) {
       return new Response(prodError.message, { status: 500 });
     }
 
-    if (!products || products.length !== productIds.length) {
+    if (!products || products.length !== outProductIds.length) {
       return new Response("One or more products not found", { status: 404 });
     }
 
     const { data: movements, error: movError } = await supabaseServer
       .from("stock_movements")
-      .select("product_id, movement_date, type, quantity")
+      .select("product_id, movement_date, type, quantity, created_at")
       .eq("user_id", user.uid)
-      .in("product_id", productIds)
+      .in("product_id", outProductIds)
       .neq("stock_invoice_id", id)
       .order("movement_date", { ascending: true })
       .order("created_at", { ascending: true });
@@ -165,7 +164,9 @@ export async function PATCH(
   const { data: updatedHeader, error: updateHeaderError } = await supabaseServer
     .from("stock_invoices")
     .update({
-      // Editing is restricted: do not allow changing type/date/note.
+      invoice_date,
+      type,
+      note: body.note ?? null,
       updated_at: new Date().toISOString(),
       updated_by: user.uid,
     })
@@ -178,12 +179,6 @@ export async function PATCH(
     return new Response(updateHeaderError?.message || "Unable to update invoice", {
       status: 500,
     });
-  }
-
-  // Re-apply. Keep original line note values.
-  const existingNoteByProduct = new Map<string, string | null>();
-  for (const l of existingLines ?? []) {
-    existingNoteByProduct.set(l.product_id, l.note ?? null);
   }
 
   const { error: deleteLinesError } = await supabaseServer
@@ -201,7 +196,7 @@ export async function PATCH(
     invoice_id: id,
     product_id: l.product_id,
     quantity: l.quantity,
-    note: existingNoteByProduct.get(l.product_id!) ?? null,
+    note: l.note ?? null,
   }));
 
   const { data: createdLines, error: insertLinesError } = await supabaseServer
@@ -219,7 +214,7 @@ export async function PATCH(
     movement_date: invoice_date,
     type,
     quantity: l.quantity,
-    note: existingNoteByProduct.get(l.product_id!) ?? null,
+    note: l.note ?? null,
     created_by: user.uid,
     stock_invoice_id: id,
   }));

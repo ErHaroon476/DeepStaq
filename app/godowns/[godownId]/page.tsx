@@ -1,10 +1,11 @@
 "use client";
 
 import { useAuth } from "@/components/providers/auth-provider";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import appToast from "@/lib/toast";
 import Link from "next/link";
-import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, TrendingDown, BarChart3, Search, Calendar, Info, Eye, Download } from "lucide-react";
+import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, TrendingDown, BarChart3, Search, Calendar, Info, Eye, Download, ArrowDownCircle, Save, RefreshCw, History, Filter, RotateCcw, ChevronLeft, ChevronRight, PlusCircle, FileText, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import jsPDF from "jspdf";
 import {
@@ -128,9 +129,10 @@ export default function GodownDetailPage({
   ]);
   const [invoices, setInvoices] = useState<StockInvoiceListItem[]>([]);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
+  const [invoiceDeletingId, setInvoiceDeletingId] = useState<string | null>(null);
   const [invoiceFilterFrom, setInvoiceFilterFrom] = useState<string>("");
   const [invoiceFilterTo, setInvoiceFilterTo] = useState<string>("");
-  const [invoiceEditingId, setInvoiceEditingId] = useState<string | null>(null);
 
   const [invoiceViewingId, setInvoiceViewingId] = useState<string | null>(null);
   const [invoiceViewing, setInvoiceViewing] = useState<StockInvoiceDetail | null>(null);
@@ -148,6 +150,49 @@ export default function GodownDetailPage({
   const [range, setRange] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
+
+  // Track window width for responsive dropdowns
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  // Refs for product search inputs (to position dropdowns correctly)
+  const mobileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const desktopInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [dropdownPositions, setDropdownPositions] = useState<Record<number, {top: number, left: number}>>({});
+
+  const updateDropdownPosition = (index: number, isMobileView: boolean) => {
+    const refs = isMobileView ? mobileInputRefs.current : desktopInputRefs.current;
+    const input = refs[index];
+    if (input) {
+      const rect = input.getBoundingClientRect();
+      setDropdownPositions(prev => ({
+        ...prev,
+        [index]: {
+          top: rect.bottom + 8,
+          left: isMobileView ? 16 : rect.left
+        }
+      }));
+    }
+  };
+
+  // Update all dropdown positions on scroll (so dropdowns follow inputs)
+  useEffect(() => {
+    const handleScroll = () => {
+      invoiceLines.forEach((line, idx) => {
+        if (line.product_open) {
+          updateDropdownPosition(idx, isMobile);
+        }
+      });
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [invoiceLines, isMobile]);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // create unit
   const [unitOpen, setUnitOpen] = useState(false);
@@ -431,6 +476,7 @@ export default function GodownDetailPage({
   const createInvoice = async () => {
     if (!headers) return;
     try {
+      setInvoiceSaving(true);
       const payload = {
         godown_id: godownId,
         invoice_date: invoiceDate,
@@ -459,77 +505,21 @@ export default function GodownDetailPage({
       appToast.success(appToast.messages.data.saveSuccess);
     } catch (e) {
       appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
+    } finally {
+      setInvoiceSaving(false);
     }
   };
 
   const deleteInvoice = async (id: string) => {
     if (!headers) return;
     try {
+      setInvoiceDeletingId(id);
       const res = await fetch(`/api/stock-invoices/${id}`, {
         method: "DELETE",
         headers,
       });
       if (!res.ok && res.status !== 204) throw new Error(await res.text());
 
-      if (invoiceEditingId === id) {
-        setInvoiceEditingId(null);
-        resetInvoiceForm();
-      }
-
-      await loadInvoices();
-      await loadCurrentStock();
-      await loadStockAnalytics();
-      appToast.success(appToast.messages.data.saveSuccess);
-    } catch (e) {
-      appToast.error(e instanceof Error ? e.message : appToast.messages.data.saveError);
-    }
-  };
-
-  const openEditInvoice = async (id: string) => {
-    if (!headers) return;
-    try {
-      const res = await fetch(`/api/stock-invoices/${id}`, { headers });
-      if (!res.ok) throw new Error(await res.text());
-      const inv = (await res.json()) as StockInvoiceDetail;
-      setInvoiceEditingId(inv.id);
-      setInvoiceType(inv.type);
-      setInvoiceDate(inv.invoice_date);
-      setInvoiceNote(inv.note ?? "");
-      setInvoiceLines(
-        (inv.lines ?? []).map((l) => ({
-          product_id: l.product_id,
-          product_query: products.find((p) => p.id === l.product_id)?.name ?? "",
-          product_open: false,
-          quantity: String(l.quantity),
-          note: l.note ?? "",
-        })),
-      );
-    } catch (e) {
-      appToast.error(e instanceof Error ? e.message : appToast.messages.data.loadError);
-    }
-  };
-
-  const updateInvoice = async () => {
-    if (!headers || !invoiceEditingId) return;
-    try {
-      const payload = {
-        lines: invoiceLines
-          .map((l) => ({
-            product_id: l.product_id || undefined,
-            quantity: Number(l.quantity),
-          }))
-          .filter((l) => l.product_id && l.quantity && l.quantity > 0),
-      };
-
-      const res = await fetch(`/api/stock-invoices/${invoiceEditingId}`, {
-        method: "PATCH",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(await res.text());
-
-      setInvoiceEditingId(null);
-      resetInvoiceForm();
       await loadInvoices();
       await loadCurrentStock();
       await loadStockAnalytics();
@@ -794,13 +784,13 @@ export default function GodownDetailPage({
         </header>
 
         {/* Modern Tab Navigation */}
-        <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 rounded-2xl border border-slate-700/50 p-1 backdrop-blur-xl shadow-xl">
-          <div className="flex gap-1 p-1">
+        <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 rounded-2xl border border-slate-700/50 p-1 backdrop-blur-xl shadow-xl overflow-x-auto">
+          <div className="flex gap-1 p-1 min-w-max">
             {(["overview", "daily", "units", "companies", "products"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setActiveTab(t)}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-300 ${
+                className={`px-3 sm:px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-300 whitespace-nowrap ${
                   activeTab === t
                     ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/25"
                     : "text-slate-400 hover:text-white hover:bg-slate-700/50"
@@ -935,7 +925,7 @@ export default function GodownDetailPage({
                   {[
                     {
                       label: "Total Opening Stock",
-                      value: stockAnalytics?.total_opening_stock?.toFixed(0) || "0",
+                      value: stockAnalytics && typeof stockAnalytics.total_opening_stock === 'number' ? stockAnalytics.total_opening_stock.toFixed(0) : "0",
                       accent: "from-blue-500/20 via-blue-500/0 to-transparent",
                       icon: <Package className="h-5 w-5" />,
                       iconBg: "from-blue-500 to-indigo-600",
@@ -945,7 +935,7 @@ export default function GodownDetailPage({
                     },
                     {
                       label: "Current Stock",
-                      value: stockAnalytics?.total_current_stock?.toFixed(0) || "0",
+                      value: stockAnalytics && typeof stockAnalytics.total_current_stock === 'number' ? stockAnalytics.total_current_stock.toFixed(0) : "0",
                       accent: "from-emerald-500/20 via-emerald-500/0 to-transparent",
                       icon: <Boxes className="h-5 w-5" />,
                       iconBg: "from-emerald-500 to-green-600",
@@ -955,7 +945,7 @@ export default function GodownDetailPage({
                     },
                     {
                       label: "Total Stock IN",
-                      value: `+${stockAnalytics?.total_stock_in?.toFixed(0) || "0"}`,
+                      value: stockAnalytics && typeof stockAnalytics.total_stock_in === 'number' ? `+${stockAnalytics.total_stock_in.toFixed(0)}` : "+0",
                       accent: "from-green-500/20 via-green-500/0 to-transparent",
                       icon: <TrendingUp className="h-5 w-5" />,
                       iconBg: "from-green-500 to-emerald-600",
@@ -965,7 +955,7 @@ export default function GodownDetailPage({
                     },
                     {
                       label: "Total Stock OUT",
-                      value: `-${stockAnalytics?.total_stock_out?.toFixed(0) || "0"}`,
+                      value: stockAnalytics && typeof stockAnalytics.total_stock_out === 'number' ? `-${stockAnalytics.total_stock_out.toFixed(0)}` : "-0",
                       accent: "from-rose-500/20 via-rose-500/0 to-transparent",
                       icon: <TrendingDown className="h-5 w-5" />,
                       iconBg: "from-rose-500 to-red-600",
@@ -1215,344 +1205,306 @@ export default function GodownDetailPage({
         )}
 
         {activeTab === "daily" && (
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-sm font-semibold">Daily In/Out</h2>
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col gap-2">
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+                Daily In/Out
+              </h2>
+              <p className="text-sm text-slate-400">
+                Create stock invoices, then view, export, or reverse them.
+              </p>
             </div>
 
-            <div className="rounded-2xl border app-border app-surface p-4 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Type</label>
-                  <select
-                    value={invoiceType}
-                    onChange={(e) => setInvoiceType(e.target.value as StockInvoiceType)}
-                    disabled={Boolean(invoiceEditingId)}
-                    className={`w-full px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      invoiceEditingId ? "opacity-70" : ""
-                    }`}
+            {/* Create Invoice Card */}
+            <div className="group relative rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900/90 to-slate-800/90 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10 backdrop-blur-xl">
+              {/* Animated gradient background */}
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/15 via-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              
+              {/* Header */}
+              <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-700/50 px-5 py-4 sm:px-6 sm:py-5">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="relative p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 shadow-lg shadow-cyan-500/30 group-hover:shadow-xl transition-all duration-300 group-hover:scale-110">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-white/30 to-transparent rounded-xl sm:rounded-2xl animate-pulse"></div>
+                    <Plus className="relative h-5 w-5 sm:h-6 sm:w-6 text-white z-10" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-base sm:text-lg font-bold text-white truncate">Create Invoice</div>
+                    <div className="text-xs sm:text-sm text-slate-400">Add products and quantities</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={resetInvoiceForm}
+                    disabled={invoiceSaving}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-600/50 bg-slate-800/50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all duration-300 disabled:opacity-50"
                   >
-                    <option value="IN">Stock IN</option>
-                    <option value="OUT">Stock OUT</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={invoiceDate}
-                    onChange={(e) => setInvoiceDate(e.target.value)}
-                    disabled={Boolean(invoiceEditingId)}
-                    className={`w-full px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      invoiceEditingId ? "opacity-70" : ""
-                    }`}
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium mb-1">Note (optional)</label>
-                  <input
-                    value={invoiceNote}
-                    onChange={(e) => setInvoiceNote(e.target.value)}
-                    disabled={Boolean(invoiceEditingId)}
-                    className={`w-full px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      invoiceEditingId ? "opacity-70" : ""
-                    }`}
-                    placeholder="Invoice note"
-                  />
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={createInvoice}
+                    disabled={invoiceSaving}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-cyan-500/30 hover:shadow-xl hover:shadow-cyan-500/40 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    {invoiceSaving ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-3.5 w-3.5" />
+                        Save Invoice
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
-              <div className="rounded-2xl border app-border overflow-visible">
-                {/* Mobile layout */}
-                <div className="sm:hidden p-3 space-y-3">
+              {/* Form Content */}
+              <div className="relative p-5 sm:p-6 space-y-5">
+                {/* Header Fields */}
+                <div className="grid gap-4 sm:grid-cols-4">
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      <ArrowDownCircle className="h-3.5 w-3.5 text-indigo-400" />
+                      Type
+                    </label>
+                    <select
+                      value={invoiceType}
+                      onChange={(e) => setInvoiceType(e.target.value as StockInvoiceType)}
+                      disabled={invoiceSaving}
+                      className="w-full px-4 py-3 text-sm bg-slate-800/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-300 disabled:opacity-50"
+                    >
+                      <option value="IN">📥 Stock IN</option>
+                      <option value="OUT">📤 Stock OUT</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      <Calendar className="h-3.5 w-3.5 text-indigo-400" />
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      value={invoiceDate}
+                      onChange={(e) => setInvoiceDate(e.target.value)}
+                      disabled={invoiceSaving}
+                      className="w-full px-4 py-3 text-sm bg-slate-800/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-300 disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                      Note (optional)
+                    </label>
+                    <input
+                      value={invoiceNote}
+                      onChange={(e) => setInvoiceNote(e.target.value)}
+                      disabled={invoiceSaving}
+                      placeholder="Add a note to this invoice..."
+                      className="w-full px-4 py-3 text-sm bg-slate-800/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-300 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+
+                {/* Lines Section */}
+                <div className="rounded-2xl border border-slate-700/50 bg-slate-800/30">
+                {/* Mobile Lines */}
+                <div className="sm:hidden divide-y divide-slate-700/30">
                   {invoiceLines.map((l, idx) => (
-                    <div key={idx} className="rounded-2xl border app-border app-surface p-3 space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium mb-1 text-subtle">Product</label>
+                    <div key={idx} className="p-4 space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-400 uppercase">Product</label>
                         <div className="relative">
                           <input
+                            ref={(el) => { mobileInputRefs.current[idx] = el; }}
                             value={l.product_query}
                             onChange={(e) => {
-                              if (invoiceEditingId) return;
                               const q = e.target.value;
                               setInvoiceLines((p) =>
                                 p.map((x, i) =>
-                                  i === idx
-                                    ? {
-                                        ...x,
-                                        product_query: q,
-                                        product_open: true,
-                                        product_id: q.trim() ? x.product_id : "",
-                                      }
-                                    : x,
+                                  i === idx ? { ...x, product_query: q, product_open: true, product_id: q.trim() ? x.product_id : "" } : x,
                                 ),
                               );
                             }}
                             onFocus={() => {
-                              if (invoiceEditingId) return;
-                              setInvoiceLines((p) =>
-                                p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)),
-                              );
+                              updateDropdownPosition(idx, true);
+                              setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)));
                             }}
-                            onBlur={() => {
-                              setTimeout(() => {
-                                setInvoiceLines((p) =>
-                                  p.map((x, i) => (i === idx ? { ...x, product_open: false } : x)),
-                                );
-                              }, 150);
-                            }}
-                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            onBlur={() => setTimeout(() => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: false } : x))), 150)}
+                            disabled={invoiceSaving}
                             placeholder="Search product..."
-                            readOnly={Boolean(invoiceEditingId)}
+                            className="mobile-product-search w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                           />
-                          {l.product_open && products.length > 0 && (
-                            <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-xl border app-border app-surface shadow-lg">
+                          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                          {isMobile && l.product_open && products.length > 0 && typeof document !== 'undefined' && dropdownPositions[idx] && createPortal(
+                            <div
+                              className="fixed z-[99999] w-[calc(100%-2rem)] max-w-sm max-h-56 overflow-auto rounded-xl border border-slate-600/50 bg-slate-800/95 backdrop-blur-xl shadow-2xl"
+                              style={{
+                                top: dropdownPositions[idx].top,
+                                left: dropdownPositions[idx].left
+                              }}
+                            >
                               {products
-                                .filter((p) => {
-                                  const stock = Number(productStocks[p.id] ?? 0);
-                                  return invoiceType === "OUT" ? stock > 0 : true;
-                                })
-                                .filter((p) =>
-                                  p.name
-                                    .toLowerCase()
-                                    .includes((l.product_query || "").toLowerCase()),
-                                )
+                                .filter((p) => (invoiceType === "OUT" ? Number(productStocks[p.id] ?? 0) > 0 : true))
+                                .filter((p) => p.name.toLowerCase().includes((l.product_query || "").toLowerCase()))
                                 .slice(0, 30)
                                 .map((p) => (
                                   <button
                                     key={p.id}
                                     type="button"
                                     onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => {
-                                      setInvoiceLines((prev) =>
-                                        prev.map((x, i) =>
-                                          i === idx
-                                            ? {
-                                                ...x,
-                                                product_id: p.id,
-                                                product_query: p.name,
-                                                product_open: false,
-                                              }
-                                            : x,
-                                        ),
-                                      );
-                                    }}
-                                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-200/60"
+                                    onClick={() => setInvoiceLines((prev) => prev.map((x, i) => i === idx ? { ...x, product_id: p.id, product_query: p.name, product_open: false } : x))}
+                                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-slate-300 hover:bg-indigo-500/20 hover:text-white transition-colors"
                                   >
                                     <span className="truncate">{p.name}</span>
-                                    <span
-                                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                                        Number(productStocks[p.id] ?? 0) > 0
-                                          ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300"
-                                          : "border-slate-500/30 bg-slate-500/20 text-slate-300"
-                                      }`}
-                                    >
+                                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${Number(productStocks[p.id] ?? 0) > 0 ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300" : "border-slate-500/30 bg-slate-500/20 text-slate-400"}`}>
                                       {Number(productStocks[p.id] ?? 0).toFixed(0)}
                                     </span>
                                   </button>
                                 ))}
-                            </div>
+                            </div>,
+                            document.body
                           )}
                         </div>
                       </div>
-
                       <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-subtle">Qty</label>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-slate-400 uppercase">Qty</label>
                           <input
                             type="number"
-                            min="0"
+                            min="1"
                             step="1"
                             value={l.quantity}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setInvoiceLines((p) =>
-                                p.map((x, i) => (i === idx ? { ...x, quantity: v } : x)),
-                              );
-                            }}
-                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            onChange={(e) => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
+                            disabled={invoiceSaving}
+                            className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                           />
                         </div>
                         <div className="flex items-end">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (invoiceEditingId) return;
-                              setInvoiceLines((p) => {
-                                if (p.length <= 1) return p;
-                                return p.filter((_, i) => i !== idx);
-                              });
-                            }}
-                            className="w-full inline-flex items-center justify-center gap-1 rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
+                            onClick={() => setInvoiceLines((p) => p.length <= 1 ? p : p.filter((_, i) => i !== idx))}
+                            disabled={invoiceSaving}
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all duration-300 disabled:opacity-50"
                           >
+                            <Trash2 className="h-3.5 w-3.5" />
                             Remove
                           </button>
                         </div>
                       </div>
-
-                      <div>
-                        <label className="block text-xs font-medium mb-1 text-subtle">Line note</label>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-400 uppercase">Line note</label>
                         <input
                           value={l.note}
-                          onChange={(e) => {
-                            if (invoiceEditingId) return;
-                            const v = e.target.value;
-                            setInvoiceLines((p) =>
-                              p.map((x, i) => (i === idx ? { ...x, note: v } : x)),
-                            );
-                          }}
-                          className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="Optional"
-                          readOnly={Boolean(invoiceEditingId)}
+                          onChange={(e) => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, note: e.target.value } : x)))}
+                          disabled={invoiceSaving}
+                          placeholder="Optional note..."
+                          className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                         />
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Desktop table */}
-                <table className="hidden sm:table min-w-full text-xs">
-                  <thead className="border-b app-border">
+                {/* Desktop Lines Table */}
+                <table className="hidden sm:table min-w-full">
+                  <thead className="border-b border-slate-700/50 bg-slate-800/50">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Product</th>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Qty</th>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Line note</th>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Action</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Product</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider w-28">Qty</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Note</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider w-24">Action</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-700/30">
                     {invoiceLines.map((l, idx) => (
-                      <tr key={idx} className="border-b app-border">
-                        <td className="px-3 py-2">
+                      <tr key={idx}>
+                        <td className="px-5 py-3">
                           <div className="relative">
                             <input
+                              ref={(el) => { desktopInputRefs.current[idx] = el; }}
                               value={l.product_query}
                               onChange={(e) => {
-                                if (invoiceEditingId) return;
                                 const q = e.target.value;
                                 setInvoiceLines((p) =>
                                   p.map((x, i) =>
-                                    i === idx
-                                      ? {
-                                          ...x,
-                                          product_query: q,
-                                          product_open: true,
-                                          product_id: q.trim() ? x.product_id : "",
-                                        }
-                                      : x,
+                                    i === idx ? { ...x, product_query: q, product_open: true, product_id: q.trim() ? x.product_id : "" } : x,
                                   ),
                                 );
                               }}
                               onFocus={() => {
-                                if (invoiceEditingId) return;
-                                setInvoiceLines((p) =>
-                                  p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)),
-                                );
+                                updateDropdownPosition(idx, false);
+                                setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)));
                               }}
-                              onBlur={() => {
-                                setTimeout(() => {
-                                  setInvoiceLines((p) =>
-                                    p.map((x, i) => (i === idx ? { ...x, product_open: false } : x)),
-                                  );
-                                }, 150);
-                              }}
-                              className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              onBlur={() => setTimeout(() => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: false } : x))), 150)}
+                              disabled={invoiceSaving}
                               placeholder="Search product..."
-                              readOnly={Boolean(invoiceEditingId)}
+                              className="desktop-product-search w-full px-4 py-2.5 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                             />
-                            {l.product_open && products.length > 0 && (
-                              <div className="absolute z-20 mt-1 w-full max-h-56 overflow-auto rounded-xl border app-border app-surface shadow-lg">
+                            {!isMobile && l.product_open && products.length > 0 && typeof document !== 'undefined' && dropdownPositions[idx] && createPortal(
+                              <div
+                                className="fixed z-[99999] w-80 max-h-56 overflow-auto rounded-xl border border-slate-600/50 bg-slate-800/95 backdrop-blur-xl shadow-2xl"
+                                style={{
+                                  top: dropdownPositions[idx].top,
+                                  left: dropdownPositions[idx].left
+                                }}
+                              >
                                 {products
-                                  .filter((p) => {
-                                    const stock = Number(productStocks[p.id] ?? 0);
-                                    return invoiceType === "OUT" ? stock > 0 : true;
-                                  })
-                                  .filter((p) =>
-                                    p.name
-                                      .toLowerCase()
-                                      .includes((l.product_query || "").toLowerCase()),
-                                  )
+                                  .filter((p) => (invoiceType === "OUT" ? Number(productStocks[p.id] ?? 0) > 0 : true))
+                                  .filter((p) => p.name.toLowerCase().includes((l.product_query || "").toLowerCase()))
                                   .slice(0, 30)
                                   .map((p) => (
                                     <button
                                       key={p.id}
                                       type="button"
                                       onMouseDown={(e) => e.preventDefault()}
-                                      onClick={() => {
-                                        setInvoiceLines((prev) =>
-                                          prev.map((x, i) =>
-                                            i === idx
-                                              ? {
-                                                  ...x,
-                                                  product_id: p.id,
-                                                  product_query: p.name,
-                                                  product_open: false,
-                                                }
-                                              : x,
-                                          ),
-                                        );
-                                      }}
-                                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-slate-200/60"
+                                      onClick={() => setInvoiceLines((prev) => prev.map((x, i) => i === idx ? { ...x, product_id: p.id, product_query: p.name, product_open: false } : x))}
+                                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-slate-300 hover:bg-indigo-500/20 hover:text-white transition-colors"
                                     >
                                       <span className="truncate">{p.name}</span>
-                                      <span
-                                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                                          Number(productStocks[p.id] ?? 0) > 0
-                                            ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300"
-                                            : "border-slate-500/30 bg-slate-500/20 text-slate-300"
-                                        }`}
-                                      >
+                                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${Number(productStocks[p.id] ?? 0) > 0 ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300" : "border-slate-500/30 bg-slate-500/20 text-slate-400"}`}>
                                         {Number(productStocks[p.id] ?? 0).toFixed(0)}
                                       </span>
                                     </button>
                                   ))}
-                              </div>
+                              </div>,
+                              document.body
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-5 py-3">
                           <input
                             type="number"
-                            min="0"
+                            min="1"
                             step="1"
                             value={l.quantity}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setInvoiceLines((p) =>
-                                p.map((x, i) => (i === idx ? { ...x, quantity: v } : x)),
-                              );
-                            }}
-                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            onChange={(e) => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
+                            disabled={invoiceSaving}
+                            className="w-full px-4 py-2.5 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                           />
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-5 py-3">
                           <input
                             value={l.note}
-                            onChange={(e) => {
-                              if (invoiceEditingId) return;
-                              const v = e.target.value;
-                              setInvoiceLines((p) =>
-                                p.map((x, i) => (i === idx ? { ...x, note: v } : x)),
-                              );
-                            }}
-                            className="w-full px-3 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            placeholder="Optional"
-                            readOnly={Boolean(invoiceEditingId)}
+                            onChange={(e) => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, note: e.target.value } : x)))}
+                            disabled={invoiceSaving}
+                            placeholder="Optional..."
+                            className="w-full px-4 py-2.5 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                           />
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-5 py-3">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (invoiceEditingId) return;
-                              setInvoiceLines((p) => {
-                                if (p.length <= 1) return p;
-                                return p.filter((_, i) => i !== idx);
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
+                            onClick={() => setInvoiceLines((p) => p.length <= 1 ? p : p.filter((_, i) => i !== idx))}
+                            disabled={invoiceSaving}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all duration-300 disabled:opacity-50"
                           >
-                            Remove
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </td>
                       </tr>
@@ -1561,198 +1513,253 @@ export default function GodownDetailPage({
                 </table>
               </div>
 
-              <div className="flex flex-col sm:flex-row justify-between gap-3">
+              {/* Add Line Button */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <button
                   type="button"
-                  onClick={() =>
-                    invoiceEditingId
-                      ? null
-                      :
-                    setInvoiceLines((p) => [
-                      ...p,
-                      {
-                        product_id: "",
-                        product_query: "",
-                        product_open: false,
-                        quantity: "1",
-                        note: "",
-                      },
-                    ])
-                  }
-                  className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
+                  onClick={() => setInvoiceLines((p) => [...p, { product_id: "", product_query: "", product_open: false, quantity: "1", note: "" }])}
+                  disabled={invoiceSaving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:scale-105 transition-all duration-300 disabled:opacity-50"
                 >
-                  Add line
+                  <PlusCircle className="h-4 w-4" />
+                  Add Line
                 </button>
-
-                <div className="flex justify-end gap-2">
-                  {invoiceEditingId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInvoiceEditingId(null);
-                        resetInvoiceForm();
-                      }}
-                      className="rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
-                    >
-                      Cancel edit
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={resetInvoiceForm}
-                    className="rounded-lg border app-border app-surface px-3 py-2 text-xs font-medium hover:bg-slate-200/60"
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    onClick={invoiceEditingId ? updateInvoice : createInvoice}
-                    className="rounded-lg bg-indigo-500 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-600"
-                  >
-                    {invoiceEditingId ? "Update invoice" : "Save invoice"}
-                  </button>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <div className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></div>
+                  <span>Tip: Use "OUT" only for products with stock</span>
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="rounded-2xl border app-border app-surface p-4 space-y-3">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">From</label>
-                  <input
-                    type="date"
-                    value={invoiceFilterFrom}
-                    onChange={(e) => setInvoiceFilterFrom(e.target.value)}
-                    className="px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+            {/* Recent Invoices Card */}
+            <div className="group relative rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900/90 to-slate-800/90 transition-all duration-500 hover:shadow-2xl hover:shadow-fuchsia-500/20 backdrop-blur-xl">
+              {/* Animated gradient background */}
+              <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-500/15 via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              
+              {/* Header */}
+              <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-700/50 px-5 py-4 sm:px-6 sm:py-5">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="relative p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-gradient-to-br from-fuchsia-500 via-purple-500 to-indigo-600 shadow-lg shadow-fuchsia-500/30 group-hover:shadow-xl transition-all duration-300 group-hover:scale-110">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-white/30 to-transparent rounded-xl sm:rounded-2xl animate-pulse"></div>
+                    <History className="relative h-5 w-5 sm:h-6 sm:w-6 text-white z-10" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-base sm:text-lg font-bold text-white truncate">Recent Invoices</div>
+                    <div className="text-xs sm:text-sm text-slate-400 flex items-center gap-2">
+                      <span className="flex items-center gap-1.5">
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                        Live
+                      </span>
+                      • View, export, or reverse
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">To</label>
-                  <input
-                    type="date"
-                    value={invoiceFilterTo}
-                    onChange={(e) => setInvoiceFilterTo(e.target.value)}
-                    className="px-4 py-2 text-sm border app-border app-surface rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="flex items-end">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={invoiceFilterFrom}
+                      onChange={(e) => setInvoiceFilterFrom(e.target.value)}
+                      className="px-3 py-2.5 text-sm bg-slate-800/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all"
+                      aria-label="From date"
+                    />
+                    <input
+                      type="date"
+                      value={invoiceFilterTo}
+                      onChange={(e) => setInvoiceFilterTo(e.target.value)}
+                      className="px-3 py-2.5 text-sm bg-slate-800/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all"
+                      aria-label="To date"
+                    />
+                  </div>
                   <button
                     onClick={loadInvoices}
-                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-600"
+                    disabled={invoiceLoading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-violet-500/25 hover:shadow-xl hover:shadow-violet-500/40 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100"
                   >
-                    Apply
+                    {invoiceLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Filter className="h-3.5 w-3.5" />}
+                    {invoiceLoading ? "Loading..." : "Apply"}
                   </button>
                 </div>
               </div>
 
-              <div className="rounded-2xl border app-border overflow-hidden">
-                <table className="min-w-full text-xs">
-                  <thead className="border-b app-border">
+              {/* Invoices List */}
+              <div className="relative">
+                {/* Mobile Card Layout */}
+                <div className="sm:hidden divide-y divide-slate-700/30">
+                  {invoiceLoading ? (
+                    <div className="p-8 text-center">
+                      <Loader2 className="h-8 w-8 mx-auto text-slate-500 animate-spin mb-3" />
+                      <p className="text-sm text-slate-400">Loading invoices...</p>
+                    </div>
+                  ) : invoices.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-700/50 to-slate-600/30 mb-4">
+                        <FileText className="h-8 w-8 text-slate-400" />
+                      </div>
+                      <p className="text-base font-semibold text-white mb-1">No invoices found</p>
+                      <p className="text-sm text-slate-400">Create your first invoice above</p>
+                    </div>
+                  ) : (
+                    invoices
+                      .slice((invoicePage - 1) * invoicePageSize, invoicePage * invoicePageSize)
+                      .map((inv) => (
+                        <div key={inv.id} className="p-4 sm:p-5 hover:bg-slate-800/50 transition-colors">
+                          <div className="flex items-start justify-between gap-3 mb-4">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-bold text-white truncate">{inv.invoice_no}</span>
+                                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${inv.type === "IN" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30"}`}>
+                                  {inv.type}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-slate-400">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(inv.invoice_date + "T00:00:00").toLocaleDateString()}
+                              </div>
+                              <div className="mt-2 text-xs text-slate-400 line-clamp-2">{inv.note || "No note"}</div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              onClick={() => openViewInvoice(inv.id)}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-600/50 bg-slate-800/50 px-3 py-2.5 text-xs font-semibold text-slate-300 hover:bg-indigo-500/20 hover:border-indigo-500/50 hover:text-white transition-all duration-300"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              View
+                            </button>
+                            <button
+                              onClick={() => exportInvoicePDF(inv.id)}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-600/50 bg-slate-800/50 px-3 py-2.5 text-xs font-semibold text-slate-300 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-all duration-300"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              PDF
+                            </button>
+                            <button
+                              onClick={() => { if (confirm("Delete this invoice? Stock will be reverted.")) deleteInvoice(inv.id); }}
+                              disabled={invoiceDeletingId === inv.id}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all duration-300 disabled:opacity-50"
+                            >
+                              {invoiceDeletingId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                              {invoiceDeletingId === inv.id ? "Reversing..." : "Reverse"}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                  )}
+                </div>
+
+                {/* Desktop Table Layout */}
+                <table className="hidden sm:table min-w-full">
+                  <thead className="border-b border-slate-700/50 bg-slate-800/50">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Invoice</th>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Date</th>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Note</th>
-                      <th className="px-3 py-2 text-left font-semibold text-subtle">Actions</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Invoice</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Date</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Note</th>
+                      <th className="px-5 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-700/30">
                     {invoiceLoading ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-6 text-center text-subtle">
-                          Loading...
+                        <td colSpan={4} className="px-5 py-8 text-center">
+                          <Loader2 className="h-8 w-8 mx-auto text-slate-500 animate-spin mb-3" />
+                          <p className="text-sm text-slate-400">Loading invoices...</p>
                         </td>
                       </tr>
                     ) : invoices.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-6 text-center text-subtle">
-                          No invoices.
+                        <td colSpan={4} className="px-5 py-8 text-center">
+                          <div className="relative inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-700/50 to-slate-600/30 mb-4">
+                            <FileText className="h-8 w-8 text-slate-400" />
+                          </div>
+                          <p className="text-base font-semibold text-white mb-1">No invoices found</p>
+                          <p className="text-sm text-slate-400">Create your first invoice above</p>
                         </td>
                       </tr>
                     ) : (
                       invoices
                         .slice((invoicePage - 1) * invoicePageSize, invoicePage * invoicePageSize)
                         .map((inv) => (
-                        <tr key={inv.id} className="border-b app-border">
-                          <td className="px-3 py-2 font-medium">{inv.invoice_no}</td>
-                          <td className="px-3 py-2">
-                            {new Date(inv.invoice_date + "T00:00:00").toLocaleDateString()}
-                          </td>
-                          <td className="px-3 py-2">{inv.note ?? "-"}</td>
-                          <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openViewInvoice(inv.id)}
-                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
-                            >
-                              <Eye className="h-3 w-3" /> View
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => exportInvoicePDF(inv.id)}
-                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
-                            >
-                              <Download className="h-3 w-3" /> PDF
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openEditInvoice(inv.id)}
-                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // eslint-disable-next-line no-alert
-                                if (confirm("Delete this invoice? Stock will be reverted.")) {
-                                  deleteInvoice(inv.id);
-                                }
-                              }}
-                              className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                          </td>
-                        </tr>
-                      ))
+                          <tr key={inv.id} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-bold text-white">{inv.invoice_no}</span>
+                                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${inv.type === "IN" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30"}`}>
+                                  {inv.type}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-2 text-sm text-slate-300">
+                                <Calendar className="h-4 w-4 text-slate-500" />
+                                {new Date(inv.invoice_date + "T00:00:00").toLocaleDateString()}
+                              </div>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span className="text-sm text-slate-400 line-clamp-1">{inv.note || "—"}</span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => openViewInvoice(inv.id)}
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-600/50 bg-slate-800/50 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-indigo-500/20 hover:border-indigo-500/50 hover:text-white transition-all duration-300"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => exportInvoicePDF(inv.id)}
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-600/50 bg-slate-800/50 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:text-emerald-300 transition-all duration-300"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  PDF
+                                </button>
+                                <button
+                                  onClick={() => { if (confirm("Delete this invoice? Stock will be reverted.")) deleteInvoice(inv.id); }}
+                                  disabled={invoiceDeletingId === inv.id}
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all duration-300 disabled:opacity-50"
+                                >
+                                  {invoiceDeletingId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                                  {invoiceDeletingId === inv.id ? "Reversing..." : "Reverse"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
                     )}
                   </tbody>
                 </table>
               </div>
 
+              {/* Pagination */}
               {!invoiceLoading && invoices.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
-                  <div className="text-xs text-subtle">
-                    Page {invoicePage} of {Math.max(1, Math.ceil(invoices.length / invoicePageSize))}
+                <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-5 py-4 sm:px-6 sm:py-5 border-t border-slate-700/50">
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <div className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse"></div>
+                    <span>Page {invoicePage} of {Math.max(1, Math.ceil(invoices.length / invoicePageSize))}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      type="button"
                       onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
                       disabled={invoicePage <= 1}
-                      className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60 disabled:opacity-60"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-600/50 bg-slate-800/50 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all duration-300 disabled:opacity-50"
                     >
+                      <ChevronLeft className="h-3.5 w-3.5" />
                       Prev
                     </button>
                     <button
-                      type="button"
-                      onClick={() =>
-                        setInvoicePage((p) =>
-                          Math.min(Math.max(1, Math.ceil(invoices.length / invoicePageSize)), p + 1),
-                        )
-                      }
+                      onClick={() => setInvoicePage((p) => Math.min(Math.ceil(invoices.length / invoicePageSize), p + 1))}
                       disabled={invoicePage >= Math.ceil(invoices.length / invoicePageSize)}
-                      className="inline-flex items-center gap-1 rounded-lg border app-border app-surface px-3 py-1.5 text-xs font-medium hover:bg-slate-200/60 disabled:opacity-60"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-600/50 bg-slate-800/50 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all duration-300 disabled:opacity-50"
                     >
                       Next
+                      <ChevronRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
               )}
             </div>
-
           </div>
         )}
 
