@@ -34,7 +34,9 @@ create table if not exists public.products (
   opening_stock numeric(18, 3) not null default 0,
   min_stock_threshold numeric(18, 3) not null default 0,
   cost_price numeric(18, 3),
-  selling_price numeric(18, 3)
+  selling_price numeric(18, 3),
+  deleted_at timestamptz,
+  deleted_by text
 );
 
 create type stock_movement_type as enum ('IN', 'OUT');
@@ -67,6 +69,8 @@ create table if not exists public.stock_invoices (
   created_by text not null,
   updated_at timestamptz,
   updated_by text,
+  deleted_at timestamptz,
+  deleted_by text,
   unique (user_id, godown_id, type, invoice_seq),
   unique (user_id, invoice_no)
 );
@@ -84,6 +88,11 @@ create table if not exists public.stock_invoice_lines (
 alter table public.stock_movements
   add constraint stock_movements_stock_invoice_id_fkey
   foreign key (stock_invoice_id) references public.stock_invoices(id) on delete set null;
+
+alter table public.products add column if not exists deleted_at timestamptz;
+alter table public.products add column if not exists deleted_by text;
+alter table public.stock_invoices add column if not exists deleted_at timestamptz;
+alter table public.stock_invoices add column if not exists deleted_by text;
 
 -- Current stock per product (opening + all movements up to today)
 create or replace view public.product_current_stock as

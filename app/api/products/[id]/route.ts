@@ -25,6 +25,7 @@ export async function GET(
     `)
     .eq("id", id)
     .eq("user_id", user.uid)
+    .is("deleted_at", null)
     .single();
 
   if (error) {
@@ -127,9 +128,13 @@ export async function DELETE(
 
   const { error, count } = await supabaseServer
     .from("products")
-    .delete({ count: "exact" })
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: user.uid,
+    }, { count: "exact" })
     .eq("id", id)
-    .eq("user_id", user.uid);
+    .eq("user_id", user.uid)
+    .is("deleted_at", null);
 
   if (error) {
     console.error("[DeepStaq] Failed to delete product", error);

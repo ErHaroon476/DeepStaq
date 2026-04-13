@@ -11,13 +11,15 @@ export async function GET(req: NextRequest) {
   // Get products for godown
   let productsQuery = supabaseServer
     .from("products")
-    .select("id, name, opening_stock");
+    .select("id, name, opening_stock, companies(name), unit_types(name)");
 
   if (godownId) {
     productsQuery = productsQuery.eq("godown_id", godownId);
   }
 
-  const { data: products } = await productsQuery.eq("user_id", user.uid);
+  const { data: products } = await productsQuery
+    .eq("user_id", user.uid)
+    .is("deleted_at", null);
 
   if (!products || products.length === 0) {
     return Response.json({ rows: [] });
@@ -50,10 +52,15 @@ export async function GET(req: NextRequest) {
     const currentStock = Number(product.opening_stock) + stockIn - stockOut;
 
     return {
+      companyName: product.companies?.name ?? "Unknown Company",
       productName: product.name,
+      unitName: product.unit_types?.name ?? "-",
       currentStock: currentStock
     };
-  });
+  }).sort((a, b) =>
+    a.companyName.localeCompare(b.companyName) ||
+    a.productName.localeCompare(b.productName),
+  );
 
   return Response.json({
     type: "current-stock",

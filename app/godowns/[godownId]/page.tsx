@@ -1,8 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/providers/auth-provider";
-import { use, useEffect, useMemo, useState, useRef } from "react";
-import { createPortal } from "react-dom";
+import { use, useEffect, useMemo, useState } from "react";
 import appToast from "@/lib/toast";
 import Link from "next/link";
 import { Pencil, Plus, Trash2, Package, Building2, Boxes, TrendingUp, TrendingDown, BarChart3, Search, Calendar, Info, Eye, Download, ArrowDownCircle, Save, RefreshCw, History, Filter, RotateCcw, ChevronLeft, ChevronRight, PlusCircle, FileText, Loader2 } from "lucide-react";
@@ -150,49 +149,6 @@ export default function GodownDetailPage({
   const [range, setRange] = useState<"daily" | "weekly" | "monthly" | "yearly" | "custom">("monthly");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
-
-  // Track window width for responsive dropdowns
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-
-  // Refs for product search inputs (to position dropdowns correctly)
-  const mobileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const desktopInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const [dropdownPositions, setDropdownPositions] = useState<Record<number, {top: number, left: number}>>({});
-
-  const updateDropdownPosition = (index: number, isMobileView: boolean) => {
-    const refs = isMobileView ? mobileInputRefs.current : desktopInputRefs.current;
-    const input = refs[index];
-    if (input) {
-      const rect = input.getBoundingClientRect();
-      setDropdownPositions(prev => ({
-        ...prev,
-        [index]: {
-          top: rect.bottom + 8,
-          left: isMobileView ? 16 : rect.left
-        }
-      }));
-    }
-  };
-
-  // Update all dropdown positions on scroll (so dropdowns follow inputs)
-  useEffect(() => {
-    const handleScroll = () => {
-      invoiceLines.forEach((line, idx) => {
-        if (line.product_open) {
-          updateDropdownPosition(idx, isMobile);
-        }
-      });
-    };
-    window.addEventListener('scroll', handleScroll, true);
-    return () => window.removeEventListener('scroll', handleScroll, true);
-  }, [invoiceLines, isMobile]);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 640);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   // create unit
   const [unitOpen, setUnitOpen] = useState(false);
@@ -723,6 +679,42 @@ export default function GodownDetailPage({
   // Get current stock for products
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [stockLoading, setStockLoading] = useState(false);
+  const selectedOutProductIds = useMemo(
+    () =>
+      new Set(
+        invoiceType === "OUT"
+          ? invoiceLines.map((line) => line.product_id).filter(Boolean)
+          : [],
+      ),
+    [invoiceLines, invoiceType],
+  );
+  const invoiceLineSummary = useMemo(() => {
+    const selectedCount = invoiceLines.filter((line) => line.product_id).length;
+    const totalQuantity = invoiceLines.reduce((total, line) => {
+      const qty = Number(line.quantity);
+      return Number.isFinite(qty) && qty > 0 ? total + qty : total;
+    }, 0);
+    return { selectedCount, totalQuantity };
+  }, [invoiceLines]);
+
+  const getLineProductOptions = (line: StockInvoiceLineDraft) => {
+    const query = line.product_query.trim().toLowerCase();
+    return products
+      .filter((product) => {
+        const currentStock = Number(productStocks[product.id] ?? 0);
+        const inStockRule = invoiceType !== "OUT" || currentStock > 0;
+        const duplicateOutRule =
+          invoiceType !== "OUT" ||
+          line.product_id === product.id ||
+          !selectedOutProductIds.has(product.id);
+        const matchesQuery =
+          query.length === 0 ||
+          product.name.toLowerCase().includes(query) ||
+          (product.sku?.toLowerCase().includes(query) ?? false);
+        return inStockRule && duplicateOutRule && matchesQuery;
+      })
+      .slice(0, 30);
+  };
 
   const loadCurrentStock = async () => {
     if (!headers) return;
@@ -1217,7 +1209,7 @@ export default function GodownDetailPage({
             </div>
 
             {/* Create Invoice Card */}
-            <div className="group relative rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900/90 to-slate-800/90 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10 backdrop-blur-xl">
+            <div className="group relative z-30 rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900/90 to-slate-800/90 transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10 backdrop-blur-xl overflow-visible">
               {/* Animated gradient background */}
               <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/15 via-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               
@@ -1321,39 +1313,32 @@ export default function GodownDetailPage({
                         <label className="text-xs font-semibold text-slate-400 uppercase">Product</label>
                         <div className="relative">
                           <input
-                            ref={(el) => { mobileInputRefs.current[idx] = el; }}
                             value={l.product_query}
                             onChange={(e) => {
                               const q = e.target.value;
                               setInvoiceLines((p) =>
                                 p.map((x, i) =>
-                                  i === idx ? { ...x, product_query: q, product_open: true, product_id: q.trim() ? x.product_id : "" } : x,
+                                  i === idx
+                                    ? { ...x, product_query: q, product_open: true, product_id: "" }
+                                    : x,
                                 ),
                               );
                             }}
-                            onFocus={() => {
-                              updateDropdownPosition(idx, true);
-                              setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)));
-                            }}
+                            onFocus={() => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)))}
                             onBlur={() => setTimeout(() => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: false } : x))), 150)}
                             disabled={invoiceSaving}
                             placeholder="Search product..."
-                            className="mobile-product-search w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
+                            className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                           />
                           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                          {isMobile && l.product_open && products.length > 0 && typeof document !== 'undefined' && dropdownPositions[idx] && createPortal(
-                            <div
-                              className="fixed z-[99999] w-[calc(100%-2rem)] max-w-sm max-h-56 overflow-auto rounded-xl border border-slate-600/50 bg-slate-800/95 backdrop-blur-xl shadow-2xl"
-                              style={{
-                                top: dropdownPositions[idx].top,
-                                left: dropdownPositions[idx].left
-                              }}
-                            >
-                              {products
-                                .filter((p) => (invoiceType === "OUT" ? Number(productStocks[p.id] ?? 0) > 0 : true))
-                                .filter((p) => p.name.toLowerCase().includes((l.product_query || "").toLowerCase()))
-                                .slice(0, 30)
-                                .map((p) => (
+                          {l.product_open && (
+                            <div className="absolute z-50 mt-2 w-full max-h-56 overflow-auto rounded-xl border border-slate-600/50 bg-slate-800/95 backdrop-blur-xl shadow-2xl">
+                              {getLineProductOptions(l).length === 0 ? (
+                                <div className="px-4 py-3 text-xs text-slate-400">
+                                  No matching products.
+                                </div>
+                              ) : (
+                                getLineProductOptions(l).map((p) => (
                                   <button
                                     key={p.id}
                                     type="button"
@@ -1366,9 +1351,9 @@ export default function GodownDetailPage({
                                       {Number(productStocks[p.id] ?? 0).toFixed(0)}
                                     </span>
                                   </button>
-                                ))}
-                            </div>,
-                            document.body
+                                ))
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1427,38 +1412,31 @@ export default function GodownDetailPage({
                         <td className="px-5 py-3">
                           <div className="relative">
                             <input
-                              ref={(el) => { desktopInputRefs.current[idx] = el; }}
                               value={l.product_query}
                               onChange={(e) => {
                                 const q = e.target.value;
                                 setInvoiceLines((p) =>
                                   p.map((x, i) =>
-                                    i === idx ? { ...x, product_query: q, product_open: true, product_id: q.trim() ? x.product_id : "" } : x,
+                                    i === idx
+                                      ? { ...x, product_query: q, product_open: true, product_id: "" }
+                                      : x,
                                   ),
                                 );
                               }}
-                              onFocus={() => {
-                                updateDropdownPosition(idx, false);
-                                setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)));
-                              }}
+                              onFocus={() => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: true } : x)))}
                               onBlur={() => setTimeout(() => setInvoiceLines((p) => p.map((x, i) => (i === idx ? { ...x, product_open: false } : x))), 150)}
                               disabled={invoiceSaving}
                               placeholder="Search product..."
-                              className="desktop-product-search w-full px-4 py-2.5 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
+                              className="w-72 px-4 py-2.5 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 disabled:opacity-50"
                             />
-                            {!isMobile && l.product_open && products.length > 0 && typeof document !== 'undefined' && dropdownPositions[idx] && createPortal(
-                              <div
-                                className="fixed z-[99999] w-80 max-h-56 overflow-auto rounded-xl border border-slate-600/50 bg-slate-800/95 backdrop-blur-xl shadow-2xl"
-                                style={{
-                                  top: dropdownPositions[idx].top,
-                                  left: dropdownPositions[idx].left
-                                }}
-                              >
-                                {products
-                                  .filter((p) => (invoiceType === "OUT" ? Number(productStocks[p.id] ?? 0) > 0 : true))
-                                  .filter((p) => p.name.toLowerCase().includes((l.product_query || "").toLowerCase()))
-                                  .slice(0, 30)
-                                  .map((p) => (
+                            {l.product_open && (
+                              <div className="absolute z-50 mt-2 w-72 max-h-56 overflow-auto rounded-xl border border-slate-600/50 bg-slate-800/95 backdrop-blur-xl shadow-2xl">
+                                {getLineProductOptions(l).length === 0 ? (
+                                  <div className="px-4 py-3 text-xs text-slate-400">
+                                    No matching products.
+                                  </div>
+                                ) : (
+                                  getLineProductOptions(l).map((p) => (
                                     <button
                                       key={p.id}
                                       type="button"
@@ -1471,9 +1449,9 @@ export default function GodownDetailPage({
                                         {Number(productStocks[p.id] ?? 0).toFixed(0)}
                                       </span>
                                     </button>
-                                  ))}
-                              </div>,
-                              document.body
+                                  ))
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>
@@ -1524,16 +1502,22 @@ export default function GodownDetailPage({
                   <PlusCircle className="h-4 w-4" />
                   Add Line
                 </button>
-                <div className="flex items-center gap-2 text-xs text-slate-400">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <span className="rounded-full border border-slate-600/50 bg-slate-800/50 px-2.5 py-1">
+                    Selected: {invoiceLineSummary.selectedCount}
+                  </span>
+                  <span className="rounded-full border border-slate-600/50 bg-slate-800/50 px-2.5 py-1">
+                    Total Qty: {invoiceLineSummary.totalQuantity}
+                  </span>
                   <div className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></div>
-                  <span>Tip: Use "OUT" only for products with stock</span>
+                  <span>Tip: Stock OUT hides already selected products</span>
                 </div>
               </div>
             </div>
           </div>
 
             {/* Recent Invoices Card */}
-            <div className="group relative rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900/90 to-slate-800/90 transition-all duration-500 hover:shadow-2xl hover:shadow-fuchsia-500/20 backdrop-blur-xl">
+            <div className="group relative z-10 rounded-2xl sm:rounded-3xl border border-slate-700/50 bg-gradient-to-br from-slate-900/90 to-slate-800/90 transition-all duration-500 hover:shadow-2xl hover:shadow-fuchsia-500/20 backdrop-blur-xl">
               {/* Animated gradient background */}
               <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-500/15 via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               
@@ -1775,7 +1759,8 @@ export default function GodownDetailPage({
               </button>
             </div>
             <div className="rounded-2xl border app-border app-surface overflow-hidden">
-              <table className="min-w-full text-xs">
+              <div className="overflow-x-auto">
+              <table className="min-w-[640px] w-full text-xs">
                 <thead className="border-b app-border">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold text-subtle">
@@ -1849,6 +1834,7 @@ export default function GodownDetailPage({
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -1955,7 +1941,8 @@ export default function GodownDetailPage({
             </div>
 
             <div className="rounded-2xl border app-border app-surface overflow-hidden">
-              <table className="min-w-full text-xs">
+              <div className="overflow-x-auto">
+              <table className="min-w-[640px] w-full text-xs">
                 <thead className="border-b app-border">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold text-subtle">
@@ -2064,6 +2051,7 @@ export default function GodownDetailPage({
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}

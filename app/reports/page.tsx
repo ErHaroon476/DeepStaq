@@ -21,7 +21,9 @@ type ReportRow = {
 };
 
 type CurrentStockRow = {
+  companyName: string;
   productName: string;
+  unitName: string;
   currentStock: number;
 };
 
@@ -207,13 +209,13 @@ export default function ReportsPage() {
     doc.setTextColor(0, 0, 0);
     
     const headers = reportType === "current" 
-      ? ["Product Name", "Current Stock"]
+      ? ["Company", "Product Name", "Unit", "Current Stock"]
       : reportType === "closing" 
       ? ["Product Name", "Opening Stock", "Closing Stock"]
       : ["Product Name", "Opening", "IN", "OUT", "Closing"];
     
     const columnWidths = reportType === "current" 
-      ? [80, 60]
+      ? [45, 60, 25, 30]
       : reportType === "closing" 
       ? [60, 40, 40]
       : [35, 32, 32, 32, 32];
@@ -284,7 +286,12 @@ export default function ReportsPage() {
       let rowData;
       if (reportType === "current") {
         const currentRow = row as CurrentStockRow;
-        rowData = [currentRow.productName, Math.round(currentRow.currentStock).toFixed(0)];
+        rowData = [
+          currentRow.companyName,
+          currentRow.productName,
+          currentRow.unitName,
+          Math.round(currentRow.currentStock).toFixed(0),
+        ];
       } else if (reportType === "closing") {
         const closingRow = row as ClosingStockRow;
         rowData = [closingRow.productName, Math.round(closingRow.openingStock).toFixed(0), Math.round(closingRow.closingStock).toFixed(0)];
@@ -543,14 +550,20 @@ export default function ReportsPage() {
               </div>
             </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-900/60 border-b border-slate-700/50">
+            <div className="overflow-x-auto border-t border-slate-700/50">
+              <table className="w-full border-collapse">
+                <thead className="bg-slate-900/60 border-b border-slate-700/60">
                   <tr>
                     {reportType === "current" ? (
                       <>
                         <th className="px-6 py-4 text-left font-semibold text-slate-300 text-sm">
+                          Company
+                        </th>
+                        <th className="px-6 py-4 text-left font-semibold text-slate-300 text-sm">
                           Product Name
+                        </th>
+                        <th className="px-6 py-4 text-left font-semibold text-slate-300 text-sm">
+                          Unit
                         </th>
                         <th className="px-6 py-4 text-right font-semibold text-slate-300 text-sm">
                           Current Stock
@@ -594,7 +607,7 @@ export default function ReportsPage() {
                     currentStockRows.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={2}
+                          colSpan={4}
                           className="px-6 py-12 text-center text-slate-400"
                         >
                           <div className="flex flex-col items-center gap-3">
@@ -611,7 +624,9 @@ export default function ReportsPage() {
                           key={index}
                           className="hover:bg-slate-800/50 transition-colors duration-150"
                         >
+                          <td className="px-6 py-4 text-slate-300">{row.companyName}</td>
                           <td className="px-6 py-4 text-slate-200 font-medium">{row.productName}</td>
+                          <td className="px-6 py-4 text-slate-300">{row.unitName}</td>
                           <td className="px-6 py-4 text-right">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-500/20 text-blue-300">
                               {Math.round(row.currentStock).toFixed(0)}

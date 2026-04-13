@@ -1,13 +1,25 @@
 @import "tailwindcss";
 
 :root {
+  --background: #f6f8fc;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --surface-muted: #eef2ff;
+  --border-subtle: #dbe3f1;
+  --text-muted: #334155;
+  --text-subtle: #64748b;
+  --ring-focus: #4f46e5;
+}
+
+:root[data-theme="dark"] {
   --background: #020617;
   --foreground: #e5e7eb;
-  --surface: #020617;
-  --surface-muted: #020617;
-  --border-subtle: #1f2937;
-  --text-muted: #e5e7eb;
-  --text-subtle: #9ca3af;
+  --surface: #0b1220;
+  --surface-muted: #111827;
+  --border-subtle: #243042;
+  --text-muted: #cbd5e1;
+  --text-subtle: #94a3b8;
+  --ring-focus: #60a5fa;
 }
 
 @theme inline {
@@ -18,19 +30,64 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at top, rgba(59, 130, 246, 0.16), transparent 42%),
+    radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.12), transparent 34%),
+    var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.45);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+button,
+input,
+select,
+textarea,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--ring-focus);
+  outline-offset: 2px;
 }
 
 .app-shell {
   min-height: 100vh;
-  background-color: var(--background);
+  background-color: transparent;
   color: var(--foreground);
 }
 
 .app-surface {
   background-color: var(--surface);
+  border-color: var(--border-subtle);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
 }
 
 .app-surface-muted {
@@ -47,6 +104,12 @@ body {
 
 .text-subtle {
   color: var(--text-subtle);
+}
+
+.glass-surface {
+  background: color-mix(in oklab, var(--surface) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid color-mix(in oklab, var(--border-subtle) 86%, transparent);
 }
 
 .sidebar {
@@ -144,6 +207,13 @@ body {
 
 /* Mobile responsive fixes */
 @media (max-width: 640px) {
+  body {
+    background:
+      radial-gradient(circle at top, rgba(59, 130, 246, 0.14), transparent 38%),
+      radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.1), transparent 30%),
+      var(--background);
+  }
+
   .mobile-full-width {
     width: 100% !important;
   }

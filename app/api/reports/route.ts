@@ -46,7 +46,9 @@ export async function GET(req: NextRequest) {
     productsQuery = productsQuery.eq("godown_id", godownId);
   }
 
-  const { data: products, error: productsError } = await productsQuery.eq("user_id", user.uid);
+  const { data: products, error: productsError } = await productsQuery
+    .eq("user_id", user.uid)
+    .is("deleted_at", null);
 
   if (productsError) {
     console.error("[DEBUG] Products query error:", productsError);

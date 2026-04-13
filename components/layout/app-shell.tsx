@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useMemo, useState, useEffect } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Home,
   Package,
+  Archive,
   User,
   LogOut,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { LogoutButton } from "@/components/ui/logout-button";
@@ -17,6 +20,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { useTheme } from "@/components/providers/theme-provider";
 
 type NavItem = {
   href: string;
@@ -33,11 +37,7 @@ export function AppShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
-
-  // Always set dark mode on mount
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  }, []);
+  const { theme, toggleTheme } = useTheme();
 
   const getUserInitials = () => {
     if (!user) return "U";
@@ -77,6 +77,11 @@ export function AppShell({
         label: "Reports",
         icon: <BarChart3 className="h-4 w-4" />,
       },
+      {
+        href: "/recycle-bin",
+        label: "Recycle",
+        icon: <Archive className="h-4 w-4" />,
+      },
     ],
     [],
   );
@@ -108,6 +113,18 @@ export function AppShell({
               </div>
             </div>
           </div>
+          <button
+            onClick={toggleTheme}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-slate-200 transition-all hover:bg-white/20 hover:text-white"
+            aria-label="Toggle theme"
+            title="Toggle theme"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </button>
         </div>
 
         <nav className="space-y-2 text-sm">
@@ -249,6 +266,18 @@ export function AppShell({
                 </div>
 
                 <div className="ml-auto flex items-center gap-3">
+                  <button
+                    onClick={toggleTheme}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 border border-white/20 text-white transition-all hover:bg-white/25"
+                    aria-label="Toggle theme"
+                    title="Toggle theme"
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                  </button>
                   <div className="relative">
                     <button
                       onClick={() => setProfileOpen(!profileOpen)}
@@ -312,9 +341,9 @@ export function AppShell({
           </div>
         </div>
 
-        <main className="px-4 md:px-8 py-6 pb-16 md:pb-6">{children}</main>
+        <main className="px-4 md:px-8 py-5 sm:py-6 pb-20 md:pb-6">{children}</main>
 
-        <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden px-3 pb-1 pt-0.5">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden px-3 pb-2 pt-0.5">
           <div className="relative">
             {/* Floating bottom navigation with premium glass effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-[16px] blur-xl opacity-30"></div>
@@ -343,7 +372,7 @@ export function AppShell({
                       <span className={`relative z-10 text-[8px] font-bold tracking-wide transition-all duration-300 ${
                         isActive
                           ? "text-white"
-                          : "text-gray-700 group-hover:text-gray-900"
+                          : "text-white/75 group-hover:text-white"
                       }`}>
                         {n.label}
                       </span>

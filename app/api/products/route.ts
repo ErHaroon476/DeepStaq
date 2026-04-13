@@ -10,7 +10,8 @@ export async function GET(req: NextRequest) {
   let query = supabaseServer
     .from("products")
     .select("*, companies(name), unit_types(name)")
-    .eq("user_id", user.uid);
+    .eq("user_id", user.uid)
+    .is("deleted_at", null);
 
   if (godownId) {
     query = query.eq("godown_id", godownId);

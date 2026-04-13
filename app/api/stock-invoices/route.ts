@@ -32,7 +32,8 @@ export async function GET(req: NextRequest) {
     .from("stock_invoices")
     .select("id, invoice_no, invoice_seq, invoice_date, type, note, created_at, updated_at")
     .eq("user_id", user.uid)
-    .eq("godown_id", godownId);
+    .eq("godown_id", godownId)
+    .is("deleted_at", null);
 
   if (type === "IN" || type === "OUT") {
     query = query.eq("type", type);
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
       .from("products")
       .select("id, user_id, opening_stock")
       .eq("user_id", user.uid)
+      .is("deleted_at", null)
       .in("id", productIds);
 
     if (prodError) {

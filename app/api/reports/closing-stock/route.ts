@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
     productsQuery = productsQuery.eq("godown_id", godownId);
   }
 
-  const { data: products } = await productsQuery.eq("user_id", user.uid);
+  const { data: products } = await productsQuery
+    .eq("user_id", user.uid)
+    .is("deleted_at", null);
+  
 
   if (!products || products.length === 0) {
     return Response.json({ rows: [] });

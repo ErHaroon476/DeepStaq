@@ -23,6 +23,7 @@ export async function GET(
     .select("id, godown_id, invoice_no, invoice_seq, invoice_date, type, note, created_at, updated_at")
     .eq("id", id)
     .eq("user_id", user.uid)
+    .is("deleted_at", null)
     .single();
 
   if (invError || !invoice) {
@@ -56,6 +57,7 @@ export async function PATCH(
     .select("id, godown_id, invoice_date, type")
     .eq("id", id)
     .eq("user_id", user.uid)
+    .is("deleted_at", null)
     .single();
 
   if (existingError || !existing) {
@@ -109,6 +111,7 @@ export async function PATCH(
       .from("products")
       .select("id, opening_stock")
       .eq("user_id", user.uid)
+      .is("deleted_at", null)
       .in("id", outProductIds);
 
     if (prodError) {
@@ -247,6 +250,7 @@ export async function DELETE(
     .select("id")
     .eq("id", id)
     .eq("user_id", user.uid)
+    .is("deleted_at", null)
     .single();
 
   if (existingError || !existing) {
@@ -264,12 +268,16 @@ export async function DELETE(
     return new Response(deleteMovError.message, { status: 500 });
   }
 
-  // Delete invoice; lines will cascade.
+  // Soft-delete invoice so it can be recovered from recycle bin later.
   const { error: deleteInvError } = await supabaseServer
     .from("stock_invoices")
-    .delete()
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: user.uid,
+    })
     .eq("user_id", user.uid)
-    .eq("id", id);
+    .eq("id", id)
+    .is("deleted_at", null);
 
   if (deleteInvError) {
     return new Response(deleteInvError.message, { status: 500 });
