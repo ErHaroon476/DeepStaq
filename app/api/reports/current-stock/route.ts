@@ -2,6 +2,15 @@ import { NextRequest } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { requireUser } from "@/lib/authServer";
 
+function relationName(
+  relation: { name?: string } | Array<{ name?: string }> | null | undefined,
+  fallback: string,
+) {
+  if (!relation) return fallback;
+  if (Array.isArray(relation)) return relation[0]?.name ?? fallback;
+  return relation.name ?? fallback;
+}
+
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -52,9 +61,9 @@ export async function GET(req: NextRequest) {
     const currentStock = Number(product.opening_stock) + stockIn - stockOut;
 
     return {
-      companyName: product.companies?.name ?? "Unknown Company",
+      companyName: relationName(product.companies, "Unknown Company"),
       productName: product.name,
-      unitName: product.unit_types?.name ?? "-",
+      unitName: relationName(product.unit_types, "-"),
       currentStock: currentStock
     };
   }).sort((a, b) =>
